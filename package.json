@@ -1,0 +1,13 @@
+{
+  "name": "tailwindcss-uniappx",
+  "private": true,
+  "scripts": {},
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "postcss-cli": "^11.0.1",
+    "tailwindcss": "^3.4.19",
+    "weapp-tailwindcss": "^4.11.2"
+  }
+}
