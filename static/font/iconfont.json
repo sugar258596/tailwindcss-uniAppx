@@ -1,0 +1,37 @@
+{
+  "id": "5118443",
+  "name": "tang-ui",
+  "font_family": "iconfont",
+  "css_prefix_text": "icon-",
+  "description": "",
+  "glyphs": [
+    {
+      "icon_id": "10515591",
+      "name": "下箭头",
+      "font_class": "xiajiantou",
+      "unicode": "e656",
+      "unicode_decimal": 58966
+    },
+    {
+      "icon_id": "9234825",
+      "name": "添 加",
+      "font_class": "tianjia",
+      "unicode": "e62d",
+      "unicode_decimal": 58925
+    },
+    {
+      "icon_id": "4942655",
+      "name": "删除",
+      "font_class": "shanchu",
+      "unicode": "e61a",
+      "unicode_decimal": 58906
+    },
+    {
+      "icon_id": "17830630",
+      "name": "搜索",
+      "font_class": "sousuo",
+      "unicode": "e602",
+      "unicode_decimal": 58882
+    }
+  ]
+}

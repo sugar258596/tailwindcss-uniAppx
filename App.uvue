@@ -39,6 +39,7 @@
 	// #endif
 </script>
 
-<style>
-	@import "./static/tailwind.css";
+<style lang="scss">
+	@import 'tang-ui-x/static/tailwind.css';
+	@import '@/static/tailwind.css';
 </style>

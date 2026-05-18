@@ -1,0 +1,119 @@
+<script setup lang="uts">
+	import TBadge from 'tang-ui-x/components/TBadge/index.uvue'
+	import TButton from 'tang-ui-x/components/TButton/index.uvue'
+	import TCard from 'tang-ui-x/components/TCard/index.uvue'
+	import TInput from 'tang-ui-x/components/TInput/index.uvue'
+	import TProgress from 'tang-ui-x/components/TProgress/index.uvue'
+	import TSwitch from 'tang-ui-x/components/TSwitch/index.uvue'
+
+	const formTitle = ref('发球稳定性')
+	const reminderEnabled = ref(true)
+	const progress = ref(68)
+
+	const reminderLabel = computed((): string => {
+		return reminderEnabled.value ? '训练前 15 分钟提醒' : '已关闭训练提醒'
+	})
+
+	const handlePrimaryClick = (): void => {
+		uni.showToast({
+			title: '按钮点击成功',
+			icon: 'success'
+		})
+	}
+
+	const increaseProgress = (): void => {
+		progress.value = Math.min(100, progress.value + 10)
+	}
+
+	const decreaseProgress = (): void => {
+		progress.value = Math.max(0, progress.value - 10)
+	}
+</script>
+
+<template>
+	<scroll-view scroll-y class="min-h-screen bg-slate-100">
+		<view class="px-4 py-5">
+			<view class="rounded-2xl bg-white p-5 shadow-sm">
+				<view class="flex-row items-center justify-between">
+					<view class="flex-1">
+						<text class="text-xs font-semibold uppercase text-blue-500">Tang UI X</text>
+						<text class="mt-2 text-2xl font-bold text-slate-900">组件实例页面</text>
+						<text class="mt-2 text-sm leading-5 text-slate-500">
+							验证页面内按需导入、组件样式和基础交互。
+						</text>
+					</view>
+					<TBadge value="6" type="primary">
+						<view class="h-12 w-12 items-center justify-center rounded-xl bg-blue-50">
+							<text class="text-xl font-bold text-blue-500">T</text>
+						</view>
+					</TBadge>
+				</view>
+			</view>
+
+			<view class="mt-4 rounded-lg bg-blue-50 px-3 py-3">
+				<text class="text-sm leading-5 text-blue-700">
+					Tang UI X 样式已通过 App.uvue 全局引入，组件在本页按需导入。
+				</text>
+			</view>
+
+			<view class="mt-4">
+				<TCard title="按钮" subtitle="不同状态和尺寸" radius="large">
+					<TButton type="primary" block text="主要按钮" @click="handlePrimaryClick" />
+					<view class="mt-3 flex-row gap-3">
+						<view class="flex-1">
+							<TButton type="success" block text="成功" />
+						</view>
+						<view class="flex-1">
+							<TButton type="warning" block plain text="警告" />
+						</view>
+						<view class="flex-1">
+							<TButton type="danger" block loading text="加载" />
+						</view>
+					</view>
+				</TCard>
+			</view>
+
+			<view class="mt-4">
+				<TCard title="表单" subtitle="输入与开关" radius="large">
+					<view>
+						<text class="mb-2 text-sm font-medium text-slate-700">训练主题</text>
+						<TInput v-model="formTitle" clearable placeholder="请输入训练主题" />
+					</view>
+					<view class="mt-4 flex-row items-center justify-between rounded-lg bg-slate-50 p-3">
+						<view>
+							<text class="text-base font-semibold text-slate-800">开启提醒</text>
+							<text class="mt-1 text-xs text-slate-500">{{ reminderLabel }}</text>
+						</view>
+						<TSwitch
+							v-model="reminderEnabled"
+							show-text
+							active-text="开"
+							inactive-text="关"
+							active-color="#2563eb"
+						/>
+					</view>
+				</TCard>
+			</view>
+
+			<view class="mt-4 mb-8">
+				<TCard title="训练进度" subtitle="数据展示组件" radius="large">
+					<view>
+						<view class="mb-2 flex-row items-center justify-between">
+							<text class="text-sm font-medium text-slate-700">发球训练</text>
+							<text class="text-sm text-slate-500">{{ progress }}%</text>
+						</view>
+						<TProgress :percentage="progress" color="#10b981" :stroke-width="8" :show-text="false" />
+					</view>
+					<view class="mt-4 flex-row gap-3">
+						<view class="flex-1">
+							<TButton type="primary" block plain text="减少" @click="decreaseProgress" />
+						</view>
+						<view class="flex-1">
+							<TButton type="primary" block text="增加" @click="increaseProgress" />
+						</view>
+					</view>
+				</TCard>
+			</view>
+		</view>
+	</scroll-view>
+</template>

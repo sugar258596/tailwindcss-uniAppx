@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": false,
+		"skipLibCheck": true,
+		"types": [],
+		"paths": {
+			"@/*": ["./*"]
+		}
+	},
+	"include": [
+		"types/**/*.d.ts",
+		"*.d.ts",
+		"*.uts",
+		"*.uvue",
+		"pages/**/*.uvue",
+		"components/**/*.uvue"
+	]
+}

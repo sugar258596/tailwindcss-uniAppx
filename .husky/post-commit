@@ -1,0 +1,21 @@
+#!/bin/sh
+
+COMMIT_MSG=$(git log -1 --pretty=%B)
+COMMIT_HASH=$(git rev-parse --short HEAD)
+BRANCH_NAME=$(git branch --show-current)
+
+echo "✅ 提交成功！"
+echo "📌 分支: $BRANCH_NAME"
+echo "🔖 提交哈希: $COMMIT_HASH"
+echo "📝 提交信息: \"$COMMIT_MSG\""
+
+# 示例1：提醒推送代码
+echo "💡 提示: 使用 'git push' 推送代码到远程仓库"
+
+# 示例2：写入提交日志（可选）
+LOG_FILE=".git/commit_logs.txt"
+echo "$(date '+%Y-%m-%d %H:%M:%S') | $BRANCH_NAME | $COMMIT_HASH | $COMMIT_MSG" >> "$LOG_FILE"
+
+# curl -X POST "https://your-ci-server.com/webhook?commit=$COMMIT_HASH"
+
+exit 0

@@ -11,6 +11,12 @@
 			"style": {
 				"navigationBarTitleText": "JIT转义验证页面"
 			}
+		},
+		{
+			"path": "pages/tang-ui-x/tang-ui-x",
+			"style": {
+				"navigationBarTitleText": "Tang UI X 示例"
+			}
 		}
 	],
 	"globalStyle": {

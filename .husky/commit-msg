@@ -1,0 +1,52 @@
+#!/bin/sh
+
+echo "🔄 正在检查提交信息是否符合规范... 🔄"
+
+COMMIT_MSG=$(grep -v "^#" "$1" | head -n1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?: .+'
+
+if printf '%s' "$COMMIT_MSG" | grep -Eq "$PATTERN"; then
+  echo "✅ 提交信息符合规范！"
+  exit 0
+fi
+
+echo ""
+echo "❌ 提交信息不符合规范！"
+echo "----------------------------------------"
+
+SUGGEST_TYPE="feat"
+SCOPE="<模块名>"
+
+case "$COMMIT_MSG" in
+  *[Ff]ix*|*[Bb]ug*|*修复*|*错误*) SUGGEST_TYPE="fix" ;;
+  *[Dd]ocs*|*文档*|*README*) SUGGEST_TYPE="docs" ;;
+  *[Ss]tyle*|*样式*|*CSS*) SUGGEST_TYPE="style" ;;
+  *[Tt]est*|*测试*) SUGGEST_TYPE="test" ;;
+  *[Rr]efactor*|*重构*) SUGGEST_TYPE="refactor" ;;
+  *[Cc]hore*|*杂项*|*配置*) SUGGEST_TYPE="chore" ;;
+esac
+
+SUBJECT=$(echo "$COMMIT_MSG" | sed -E 's/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?:\s*//I' | xargs)
+[ -z "$SUBJECT" ] && SUBJECT="添加描述信息"
+
+echo "💡 规范要求:"
+echo "  • 格式: <type>(<scope>): <subject> 或 <type>: <subject>"
+echo "  • 示例: ${SUGGEST_TYPE}(${SCOPE}): ${SUBJECT}"
+echo ""
+echo "📋 常用类型说明:"
+echo "  feat     : 新功能"
+echo "  fix      : bug 修复"
+echo "  docs     : 文档变更"
+echo "  style    : 代码样式调整"
+echo "  refactor : 重构代码"
+echo "  perf     : 性能优化"
+echo "  test     : 测试相关"
+echo "  build    : 构建相关"
+echo "  ci       : CI 配置"
+echo "  chore    : 工具或配置变更"
+echo "  revert   : 回滚提交"
+echo ""
+echo "📝 你的输入: \"${COMMIT_MSG}\""
+echo "----------------------------------------"
+exit 1
+ 

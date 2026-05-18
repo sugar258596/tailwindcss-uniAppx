@@ -1,5 +1,8 @@
 import App from './App.uvue'
 
+
+import 'tang-ui-x/locales/index.uts'
+
 import { createSSRApp } from 'vue'
 export function createApp() {
 	const app = createSSRApp(App)
