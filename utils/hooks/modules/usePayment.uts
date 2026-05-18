@@ -1,0 +1,479 @@
+import { ref, computed, watch } from 'vue'
+import { showToast } from './toast'
+
+/**
+ * 支付平台类型
+ */
+export type PaymentPlatform = 'wechat' | 'alipay'
+
+/**
+ * 平台类型
+ */
+export type PlatformType = 'app' | 'h5' | 'mp-weixin' | 'mp-alipay'
+
+/**
+ * 支付状态类型
+ */
+export type PayStatus = 'pending' | 'success' | 'failed'
+
+/**
+ * 支付配置参数
+ */
+export interface PaymentConfig {
+  /** 订单号 */
+  orderNo: string
+  /** 订单金额 */
+  amount?: number | string
+  /** 支付平台（微信/支付宝） */
+  platform?: PaymentPlatform
+  /** 是否为课程支付 */
+  isCourse?: boolean
+  /** 微信openid（小程序、JSAPI支付需要） */
+  wxOpenid?: string
+  /** 微信Code（小程序、JSAPI支付需要） */
+  wxCode?: string
+  /** H5支付成功后跳转地址 */
+  redirectUrl?: string
+  /** 支付成功回调 */
+  onSuccess?: (orderNo: string) => void
+  /** 支付失败回调 */
+  onFailed?: (orderNo: string, error?: any) => void
+  /** 支付取消回调 */
+  onCancel?: () => void
+}
+
+/**
+ * 获取当前运行平台
+ */
+function getCurrentPlatform(): PlatformType {
+  /* eslint-disable no-unreachable */
+  // #ifdef APP-ANDROID || APP-IOS || APP
+  return 'app'
+  // #endif
+
+  // #ifdef MP-WEIXIN
+  return 'mp-weixin'
+  // #endif
+
+  // #ifdef MP-ALIPAY
+  return 'mp-alipay'
+  // #endif
+
+  // #ifdef H5 || WEB
+  return 'h5'
+  // #endif
+
+  return 'h5' // 默认返回h5
+  /* eslint-enable no-unreachable */
+}
+
+/**
+ * 获取支付类型参数
+ * @param platform 支付平台
+ * @param currentPlatform 当前运行平台
+ * @returns paytype 参数
+ */
+function getPayType(platform: PaymentPlatform, currentPlatform: PlatformType): number {
+  if (platform === 'wechat') {
+    switch (currentPlatform) {
+      case 'app':
+        return 2 // APP支付
+      case 'h5':
+        return 1 // Native扫码支付（H5显示二维码）
+      case 'mp-weixin':
+        return 4 // 小程序支付
+      default:
+        return 0 // JSAPI支付
+    }
+  } else {
+    // 支付宝支付类型
+    return currentPlatform === 'h5' ? 1 : 2
+  }
+}
+
+/**
+ * 跨端支付 Composable
+ * 支持微信支付、支付宝支付，自动适配 APP、H5、小程序等平台
+ */
+export function usePayment() {
+  /** 当前平台 */
+  const platform = getCurrentPlatform()
+
+  /** 支付加载状态 */
+  const paying = ref(false)
+
+  /** 支付配置 */
+  const paymentConfig = ref<PaymentConfig | null>(null)
+
+  // ==================== 支付轮询相关状态 ====================
+
+  /** 订单号 */
+  const orderNumber = ref('')
+
+  /** 支付轮询加载状态 */
+  const payLoading = ref(false)
+
+  /** 支付状态 */
+  const payStatus = ref<PayStatus>('pending')
+
+  /** 是否显示支付二维码 */
+  const showQrCode = ref(false)
+
+  /** 支付二维码URL */
+  const qrCodeUrl = ref('')
+
+  /** 轮询定时器ID */
+  let pollTimer: number | null = null
+
+  /** 轮询间隔（毫秒） */
+  const pollInterval = 3000
+
+  // ==================== 支付轮询方法 ====================
+
+  /** 启动支付状态轮询 */
+  const startPoll = () => {
+    if (pollTimer != null) {
+      clearInterval(pollTimer)
+    }
+    pollTimer = setInterval(() => {
+      pollPayStatus()
+    }, pollInterval)
+  }
+
+  /** 停止支付状态轮询 */
+  const stopPoll = () => {
+    if (pollTimer != null) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
+  /** 轮询支付状态 */
+  const pollPayStatus = async () => {
+    if (orderNumber.value != '') return
+
+    try {
+      // const result = await payVerify({ orderNo: orderNumber.value })
+      // console.log('支付状态轮询结果:', result)
+      // // 0 未支付 1 已支付 -1 支付失败
+      // if (result === 1) {
+      // 	// 支付成功
+      // 	payStatus.value = 'success'
+      // 	showQrCode.value = false
+      // 	stopPoll()
+      // 	const config = paymentConfig.value
+      // 	if (config?.onSuccess) {
+      // 		config.onSuccess(orderNumber.value)
+      // 	}
+      // } else if (result === -1) {
+      // 	// 支付失败
+      // 	payStatus.value = 'failed'
+      // 	showQrCode.value = false
+      // 	stopPoll()
+      // 	showToast('支付失败')
+      // 	const config = paymentConfig.value
+      // 	if (config?.onFailed) {
+      // 		config.onFailed(orderNumber.value)
+      // 	}
+      // }
+    } catch (error) {
+      console.error('支付状态查询失败:', error)
+    }
+  }
+
+  /** 初始化支付（显示二维码并开始轮询） */
+  const initPayment = (qrCode: string, orderNo: string) => {
+    qrCodeUrl.value = qrCode
+    orderNumber.value = orderNo
+    showQrCode.value = true
+    payStatus.value = 'pending'
+    startPoll()
+  }
+
+  /** 重置支付状态 */
+  const resetPayment = () => {
+    stopPoll()
+    orderNumber.value = ''
+    qrCodeUrl.value = ''
+    payLoading.value = false
+    payStatus.value = 'pending'
+    showQrCode.value = false
+  }
+
+  /** 监听弹窗显示状态变化 */
+  watch(showQrCode, (newVal, oldVal) => {
+    if (oldVal === true && newVal === false) {
+      stopPoll()
+      qrCodeUrl.value = ''
+      payLoading.value = false
+    }
+  })
+
+  // ==================== 支付方法 ====================
+
+  /** 是否正在支付（包括轮询状态） */
+  const isPayLoading = computed(() => paying.value || payLoading.value)
+
+  /**
+   * 调起APP原生支付（微信）
+   */
+  const invokeAppWechatPay = async (config: PaymentConfig): Promise<boolean> => {
+    // TODO: 实现微信APP支付
+    // // 根据是否为课程支付选择对应的支付接口
+    // const payFunc = config.isCourse ? wechatPayCourse : wechatPay
+    // const result = await payFunc({
+    // 	OrderNo: config.orderNo,
+    // 	paytype: getPayType('wechat', platform),
+    // 	WxOpenid: config.wxOpenid || "wx59d6143ca15e5eac"
+    // })
+
+    // // 解析支付参数
+    // const payData = JSON.parse(result.JsParam)
+
+    // // 调起微信支付
+    // return new Promise<boolean>((resolve) => {
+    // 	uni.requestPayment({
+    // 		provider: 'wxpay',
+    // 		nonceStr: payData.nonceStr,
+    // 		package: payData.package,
+    // 		signType: payData.signType,
+    // 		paySign: payData.paySign,
+    // 		timeStamp: payData.timeStamp,
+    // 		orderInfo: result,
+    // 		success: () => {
+    // 			showToast('支付成功')
+    // 			config.onSuccess?.(config.orderNo)
+    // 			resolve(true)
+    // 		},
+    // 		fail: (error) => {
+    // 			console.error('微信支付失败:', error)
+    // 			const errorMsg = error?.errMsg || ''
+
+    // 			// 用户取消支付
+    // 			if (errorMsg.includes('cancel')) {
+    // 				config.onCancel?.()
+    // 			} else {
+    // 				showToast('支付失败')
+    // 				config.onFailed?.(config.orderNo, error)
+    // 			}
+    // 			resolve(false)
+    // 		}
+    // 	})
+    // })
+
+    console.log('微信APP支付功能待实现', config)
+    return false
+  }
+
+  /**
+   * 调起APP原生支付（支付宝）
+   */
+  const invokeAppAlipay = async (config: PaymentConfig): Promise<boolean> => {
+    // TODO: 实现支付宝APP支付
+    // const result = await alipayPay({
+    // 	OrderNo: config.orderNo,
+    // 	paytype: getPayType('alipay', platform)
+    // })
+
+    // // 调起支付宝支付
+    // return new Promise<boolean>((resolve) => {
+    // 	uni.requestPayment({
+    // 		provider: 'alipay',
+    // 		orderInfo: result,
+    // 		success: () => {
+    // 			showToast('支付成功')
+    // 			config.onSuccess?.(config.orderNo)
+    // 			resolve(true)
+    // 		},
+    // 		fail: (error) => {
+    // 			console.error('支付宝支付失败:', error)
+    // 			const errorMsg = error?.errMsg || ''
+
+    // 			// 用户取消支付
+    // 			if (errorMsg.includes('cancel')) {
+    // 				config.onCancel?.()
+    // 			} else {
+    // 				showToast('支付失败')
+    // 				config.onFailed?.(config.orderNo, error)
+    // 			}
+    // 			resolve(false)
+    // 		}
+    // 	})
+    // })
+
+    console.log('支付宝APP支付功能待实现', config)
+    return false
+  }
+
+  /**
+   * H5二维码支付（微信）
+   */
+  const invokeH5WechatPay = async (config: PaymentConfig): Promise<boolean> => {
+    // TODO: 实现微信H5二维码支付
+    // console.log('获取微信支付二维码...')
+    // // 根据是否为课程支付选择对应的支付接口
+    // const payFunc = config.isCourse ? wechatPayCourse : wechatPay
+    // const qrCode = await payFunc({
+    // 	OrderNo: config.orderNo,
+    // 	paytype: 1, // Native扫码支付
+    // 	type: 0
+    // })
+
+    // console.log('获取到支付二维码:', qrCode)
+
+    // // 初始化支付轮询（显示二维码并启动轮询）
+    // initPayment(qrCode, config.orderNo)
+
+    // return true
+
+    console.log('微信H5支付功能待实现', config)
+    return false
+  }
+
+  /**
+   * H5二维码支付（支付宝）
+   */
+  const invokeH5Alipay = async (config: PaymentConfig): Promise<boolean> => {
+    // TODO: 实现支付宝H5支付
+    // const result = await alipayPay({
+    // 	OrderNo: config.orderNo,
+    // 	paytype: 1, // H5支付
+    // 	NewUrl: config.redirectUrl
+    // })
+
+    // // 支付宝H5支付会返回一个跳转URL
+    // if (result != null) {
+    // 	// 跳转到支付宝支付页面
+    // 	window.location.href = result
+    // 	return true
+    // }
+
+    console.log('支付宝H5支付功能待实现', config)
+    return false
+  }
+
+  /**
+   * 小程序支付（微信）
+   */
+  const invokeMpWechatPay = async (config: PaymentConfig): Promise<boolean> => {
+    // TODO: 实现微信小程序支付
+    // // 根据是否为课程支付选择对应的支付接口
+    // const payFunc = config.isCourse ? wechatPayCourse : wechatPay
+    // const result = await payFunc({
+    // 	OrderNo: config.orderNo,
+    // 	paytype: 4, // 小程序支付
+    // 	WxOpenid: config.wxOpenid,
+    // 	WxCode: config.wxCode
+    // })
+
+    // const payData = JSON.parse(result.JsParam)
+
+    // return new Promise<boolean>((resolve) => {
+    // 	uni.requestPayment({
+    // 		provider: 'wxpay',
+    // 		timeStamp: payData.timeStamp,
+    // 		nonceStr: payData.nonceStr,
+    // 		package: payData.package,
+    // 		signType: payData.signType,
+    // 		paySign: payData.paySign,
+    // 		success: () => {
+    // 			showToast('支付成功')
+    // 			config.onSuccess?.(config.orderNo)
+    // 			resolve(true)
+    // 		},
+    // 		fail: (error) => {
+    // 			console.error('小程序支付失败:', error)
+    // 			const errorMsg = error?.errMsg || ''
+
+    // 			if (errorMsg.includes('cancel')) {
+    // 				config.onCancel?.()
+    // 			} else {
+    // 				showToast('支付失败')
+    // 				config.onFailed?.(config.orderNo, error)
+    // 			}
+    // 			resolve(false)
+    // 		}
+    // 	})
+    // })
+
+    console.log('微信小程序支付功能待实现', config)
+    return false
+  }
+
+  /**
+   * 发起支付
+   * @param config 支付配置
+   */
+  const startPay = async (config: PaymentConfig): Promise<boolean> => {
+    if (paying.value) {
+      showToast('支付处理中，请稍候')
+      return false
+    }
+
+    try {
+      paying.value = true
+      paymentConfig.value = config
+
+      const paymentPlatform = config.platform || 'wechat'
+
+      console.log(`开始支付 - 平台: ${platform}, 支付方式: ${paymentPlatform}`)
+
+      // 根据当前平台和支付平台选择对应的支付方式
+      if (platform === 'app') {
+        // APP原生支付
+        if (paymentPlatform === 'wechat') {
+          return await invokeAppWechatPay(config)
+        } else {
+          return await invokeAppAlipay(config)
+        }
+      } else if (platform === 'h5') {
+        // H5支付
+        if (paymentPlatform === 'wechat') {
+          return await invokeH5WechatPay(config)
+        } else {
+          return await invokeH5Alipay(config)
+        }
+      } else if (platform === 'mp-weixin') {
+        // 微信小程序支付
+        return await invokeMpWechatPay(config)
+      } else if (platform === 'mp-alipay') {
+        // 支付宝小程序支付（待实现）
+        showToast('暂不支持支付宝小程序支付')
+        return false
+      }
+
+      return false
+    } catch (error) {
+      console.error('支付失败:', error)
+      showToast('支付失败')
+      config.onFailed?.(config.orderNo, error)
+      return false
+    } finally {
+      paying.value = false
+    }
+  }
+
+  /**
+   * 取消支付
+   */
+  const cancelPay = () => {
+    stopPoll()
+    resetPayment()
+    paymentConfig.value = null
+  }
+
+  return {
+    // 状态
+    platform,
+    paying: isPayLoading,
+    payStatus,
+    showQrCode,
+    qrCodeUrl,
+    orderNumber,
+
+    // 方法
+    startPay,
+    cancelPay,
+    stopPoll,
+  }
+}

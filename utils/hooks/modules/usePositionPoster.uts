@@ -1,0 +1,612 @@
+/**
+ * 职位海报生成 Hook
+ * 封装职位海报绘制功能，支持 H5 和 App 端
+ */
+
+import { ref, computed, nextTick } from 'vue'
+import { useSafeArea } from './useSafeArea'
+
+/**
+ * 职位海报配置参数
+ */
+export type PositionPosterConfig = {
+  /** 职位名称 */
+  title: string
+  /** 薪资 */
+  salary: string
+  /** 职位描述（数组） */
+  description: string[]
+  /** 二维码 URL 地址 */
+  qrCodeUrl: string
+}
+
+export type PosterSize = {
+  width: number
+  height: number
+  previewWidth: number
+  previewHeight: number
+}
+
+/**
+ * usePositionPoster Hook 返回值
+ */
+export type UsePositionPosterReturn = {
+  /** 海报弹窗是否可见 */
+  posterVisible: Ref<boolean>
+  /** 海报是否正在生成 */
+  posterGenerating: Ref<boolean>
+  /** 海报临时路径 */
+  posterTempPath: Ref<string>
+  /** 海报尺寸 */
+  posterSize: ComputedRef<PosterSize>
+  /** 海报容器样式 */
+  posterContainerStyle: ComputedRef<string>
+  /** 海报预览区域样式 */
+  posterPreviewStyle: ComputedRef<string>
+  /** Canvas 样式 */
+  canvasStyle: ComputedRef<string>
+  /** 生成海报 */
+  generatePoster: () => Promise<void>
+  /** 保存海报 */
+  savePoster: () => void
+  /** 关闭海报弹窗 */
+  closePoster: () => void
+}
+
+/**
+ * 职位海报生成 Hook
+ * @param config 职位海报配置
+ * @returns 海报相关状态和方法
+ */
+export function usePositionPoster(config: Ref<PositionPosterConfig>): UsePositionPosterReturn {
+  // 获取安全区域信息
+  const { getAvailableWidth, getAvailableHeight } = useSafeArea()
+
+  // 状态管理
+  const posterVisible = ref(false)
+  const posterGenerating = ref(false)
+  const posterTempPath = ref('')
+  const canvasReady = ref(false)
+  let generateTaskId = 0
+
+  /**
+   * 海报尺寸计算（基于屏幕可用尺寸）
+   */
+  const posterSize = computed(() => {
+    const availableWidth = getAvailableWidth()
+    const availableHeight = getAvailableHeight()
+
+    // 海报宽度为屏幕宽度的 80%，最大 300px
+    const width = Math.min(availableWidth * 0.8, 300)
+    // 海报高度按 2:3 比例计算，最大不超过可用高度的 70%
+    const height = Math.min(width * 1.5, availableHeight * 0.7)
+
+    // 预览区域尺寸（留出按钮空间）
+    const previewWidth = width - 20
+    const previewHeight = height
+
+    return { width, height, previewWidth, previewHeight }
+  })
+
+  /**
+   * 海报容器样式
+   */
+  const posterContainerStyle = computed((): string => {
+    const availableWidth = getAvailableWidth()
+    return `width: ${availableWidth * 0.85}px;`
+  })
+
+  /**
+   * 海报预览区域样式
+   */
+  const posterPreviewStyle = computed((): string => {
+    const { previewWidth, previewHeight } = posterSize.value
+    return `width: ${previewWidth}px; height: ${previewHeight}px;`
+  })
+
+  /**
+   * Canvas 样式（隐藏在屏幕外用于绘制）
+   */
+  const canvasStyle = computed((): string => {
+    const { width, height } = posterSize.value
+    return `width: ${Math.floor(width)}px; height: ${Math.floor(height)}px; position: fixed; left: -9999px; top: -9999px;`
+  })
+
+  /**
+   * 生成海报 - 先显示弹窗和 loading，再绘制
+   */
+  const generatePoster = async (): Promise<void> => {
+    generateTaskId++
+    const currentTaskId = generateTaskId
+
+    // 重置状态
+    posterTempPath.value = ''
+    posterGenerating.value = true
+    canvasReady.value = false
+    posterVisible.value = true
+
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        resolve()
+      }, 300)
+    })
+
+    if (currentTaskId !== generateTaskId) {
+      return
+    }
+
+    canvasReady.value = true
+    await drawPoster()
+  }
+
+  /**
+   * 绘制海报 - 兼容多端
+   */
+  const drawPoster = (): Promise<void> => {
+    const { width, height } = posterSize.value
+    const canvasWidth = Math.floor(width)
+    const canvasHeight = Math.floor(height)
+    let drawTask: Promise<void> = Promise.resolve()
+
+    // #ifdef H5
+    drawTask = drawPosterH5(canvasWidth, canvasHeight)
+    // #endif
+
+    // #ifndef H5
+    drawTask = drawPosterApp(canvasWidth, canvasHeight)
+    // #endif
+
+    return drawTask
+  }
+
+  /**
+   * H5 端绘制海报
+   */
+  const drawPosterH5 = (canvasWidth: number, canvasHeight: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.getElementById('positionPosterCanvas') as HTMLCanvasElement
+      if (canvas == null) {
+        posterGenerating.value = false
+        closePoster()
+        reject(new Error('Canvas 节点不存在'))
+        return
+      }
+
+      const ctx = canvas.getContext('2d')
+      if (ctx == null) {
+        posterGenerating.value = false
+        closePoster()
+        reject(new Error('Canvas 上下文不存在'))
+        return
+      }
+
+      // 设置 canvas 尺寸
+      canvas.width = canvasWidth
+      canvas.height = canvasHeight
+
+      // 绘制白色背景
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+
+      // 绘制职位名称
+      ctx.fillStyle = '#1f2937'
+      ctx.font = 'bold 18px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.fillText(config.value.title, 20, 35)
+
+      // 绘制薪资
+      ctx.fillStyle = '#10b981'
+      ctx.font = 'bold 16px sans-serif'
+      ctx.fillText(config.value.salary, 20, 60)
+
+      // 绘制分割线
+      ctx.strokeStyle = '#e5e7eb'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(20, 75)
+      ctx.lineTo(canvasWidth - 20, 75)
+      ctx.stroke()
+
+      // 绘制职位描述标题
+      ctx.fillStyle = '#1f2937'
+      ctx.font = 'bold 14px sans-serif'
+      ctx.fillText('职位描述', 20, 100)
+
+      // 绘制职位描述内容
+      ctx.fillStyle = '#4b5563'
+      ctx.font = '12px sans-serif'
+      let descY = 125
+      const lineHeight = 20
+      const maxWidth = canvasWidth - 40
+
+      config.value.description.forEach((item, index) => {
+        const text = `${index + 1}.${item}`
+        // 文字换行处理
+        const words = text.split('')
+        let line = ''
+        for (let i = 0; i < words.length; i++) {
+          const testLine = line + words[i]
+          const metrics = ctx.measureText(testLine)
+          if (metrics.width > maxWidth && i > 0) {
+            ctx.fillText(line, 20, descY)
+            line = words[i]
+            descY += lineHeight
+          } else {
+            line = testLine
+          }
+        }
+        ctx.fillText(line, 20, descY)
+        descY += lineHeight + 5
+      })
+
+      // 底部绿色区域高度
+      const bottomHeight = 80
+      const bottomY = canvasHeight - bottomHeight
+
+      // 绘制底部绿色区域
+      ctx.fillStyle = '#059669'
+      ctx.fillRect(0, bottomY, canvasWidth, bottomHeight)
+
+      // 绘制底部文字
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 14px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.fillText('找工作，上妙界直聘', 20, bottomY + 30)
+
+      ctx.font = '11px sans-serif'
+      ctx.fillText('扫描二维码，解锁更多好工作', 20, bottomY + 50)
+
+      // 绘制二维码
+      const qrSize = 55
+      const qrX = canvasWidth - qrSize - 15
+      const qrY = bottomY + (bottomHeight - qrSize) / 2
+
+      if (config.value.qrCodeUrl != '') {
+        // 加载二维码图片
+        const qrImg = new Image()
+        qrImg.crossOrigin = 'anonymous'
+        qrImg.onload = () => {
+          // 绘制白色背景
+          ctx.fillStyle = '#ffffff'
+          roundRectH5(ctx, qrX, qrY, qrSize, qrSize, 4)
+          ctx.fill()
+          // 绘制二维码图片
+          ctx.drawImage(qrImg, qrX + 2, qrY + 2, qrSize - 4, qrSize - 4)
+          // 导出图片
+          exportPosterH5(canvas).then(resolve).catch(reject)
+        }
+        qrImg.onerror = () => {
+          posterGenerating.value = false
+          closePoster()
+          reject(new Error('二维码加载失败'))
+        }
+        qrImg.src = config.value.qrCodeUrl
+      } else {
+        // 没有二维码 URL 时绘制占位
+        drawQrPlaceholder(ctx, qrX, qrY, qrSize)
+        exportPosterH5(canvas).then(resolve).catch(reject)
+      }
+    })
+  }
+
+  /**
+   * 绘制二维码占位符
+   */
+  const drawQrPlaceholder = (
+    ctx: CanvasRenderingContext2D,
+    qrX: number,
+    qrY: number,
+    qrSize: number
+  ) => {
+    ctx.fillStyle = '#ffffff'
+    roundRectH5(ctx, qrX, qrY, qrSize, qrSize, 4)
+    ctx.fill()
+
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = '9px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('二维码', qrX + qrSize / 2, qrY + qrSize / 2 + 3)
+  }
+
+  /**
+   * H5 端导出海报
+   */
+  const exportPosterH5 = (canvas: HTMLCanvasElement): Promise<void> => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        posterTempPath.value = canvas.toDataURL('image/png')
+        posterGenerating.value = false
+        resolve()
+      }, 100)
+    })
+  }
+
+  /**
+   * App/小程序端绘制海报
+   */
+  const drawPosterApp = (canvasWidth: number, canvasHeight: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const query = uni.createSelectorQuery()
+      query
+        .select('#positionPosterCanvas')
+        .fields({ node: true, size: true })
+        .exec((res) => {
+          if (!res[0] || !res[0].node) {
+            posterGenerating.value = false
+            closePoster()
+            reject(new Error('Canvas 节点获取失败'))
+            return
+          }
+
+          const canvas = res[0].node
+          const ctx = canvas.getContext('2d')
+          if (ctx == null) {
+            posterGenerating.value = false
+            closePoster()
+            reject(new Error('Canvas 上下文获取失败'))
+            return
+          }
+
+          const dpr = uni.getSystemInfoSync().pixelRatio
+          canvas.width = canvasWidth * dpr
+          canvas.height = canvasHeight * dpr
+          ctx.scale(dpr, dpr)
+
+          ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+
+          // 绘制白色背景
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+
+          // 绘制职位名称
+          ctx.fillStyle = '#1f2937'
+          ctx.font = 'bold 18px sans-serif'
+          ctx.textAlign = 'left'
+          ctx.fillText(config.value.title, 20, 35)
+
+          // 绘制薪资
+          ctx.fillStyle = '#10b981'
+          ctx.font = 'bold 16px sans-serif'
+          ctx.fillText(config.value.salary, 20, 60)
+
+          // 绘制分割线
+          ctx.strokeStyle = '#e5e7eb'
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(20, 75)
+          ctx.lineTo(canvasWidth - 20, 75)
+          ctx.stroke()
+
+          // 绘制职位描述标题
+          ctx.fillStyle = '#1f2937'
+          ctx.font = 'bold 14px sans-serif'
+          ctx.fillText('职位描述', 20, 100)
+
+          // 绘制职位描述内容
+          ctx.fillStyle = '#4b5563'
+          ctx.font = '12px sans-serif'
+          let descY = 125
+          const lineHeight = 20
+          const maxWidth = canvasWidth - 40
+
+          config.value.description.forEach((item, index) => {
+            const text = `${index + 1}.${item}`
+            const words = text.split('')
+            let line = ''
+            for (let i = 0; i < words.length; i++) {
+              const testLine = line + words[i]
+              const metrics = ctx.measureText(testLine)
+              if (metrics.width > maxWidth && i > 0) {
+                ctx.fillText(line, 20, descY)
+                line = words[i]
+                descY += lineHeight
+              } else {
+                line = testLine
+              }
+            }
+            ctx.fillText(line, 20, descY)
+            descY += lineHeight + 5
+          })
+
+          // 底部绿色区域高度
+          const bottomHeight = 80
+          const bottomY = canvasHeight - bottomHeight
+
+          // 绘制底部绿色区域
+          ctx.fillStyle = '#059669'
+          ctx.fillRect(0, bottomY, canvasWidth, bottomHeight)
+
+          // 绘制底部文字
+          ctx.fillStyle = '#ffffff'
+          ctx.font = 'bold 14px sans-serif'
+          ctx.textAlign = 'left'
+          ctx.fillText('找工作，上妙界直聘', 20, bottomY + 30)
+
+          ctx.font = '11px sans-serif'
+          ctx.fillText('扫描二维码，解锁更多好工作', 20, bottomY + 50)
+
+          // 绘制二维码占位区域
+          const qrSize = 55
+          const qrX = canvasWidth - qrSize - 15
+          const qrY = bottomY + (bottomHeight - qrSize) / 2
+          ctx.fillStyle = '#ffffff'
+          roundRectH5(ctx, qrX, qrY, qrSize, qrSize, 4)
+          ctx.fill()
+
+          // 绘制二维码占位文字（小程序端先保留占位）
+          ctx.fillStyle = '#9ca3af'
+          ctx.font = '9px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText('二维码', qrX + qrSize / 2, qrY + qrSize / 2 + 3)
+
+          setTimeout(() => {
+            try {
+              const dataURL = canvas.toDataURL('image/png')
+              if (!dataURL || dataURL == 'data:,') {
+                posterGenerating.value = false
+                closePoster()
+                reject(new Error('Canvas 导出失败'))
+                return
+              }
+
+              const base64 = dataURL.split(',')[1]
+              const userDataPath = uni.env?.USER_DATA_PATH ?? ''
+              const filePath = `${userDataPath}/position_poster_${Date.now()}.png`
+
+              uni.getFileSystemManager().writeFile({
+                filePath,
+                data: base64,
+                encoding: 'base64',
+                success: () => {
+                  posterTempPath.value = filePath
+                  posterGenerating.value = false
+                  resolve()
+                },
+                fail: (err) => {
+                  posterGenerating.value = false
+                  closePoster()
+                  reject(err)
+                },
+              })
+            } catch (err) {
+              posterGenerating.value = false
+              closePoster()
+              reject(err)
+            }
+          }, 200)
+        })
+    })
+  }
+
+  /**
+   * 绘制圆角矩形（H5 端）
+   */
+  const roundRectH5 = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number
+  ) => {
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.lineTo(x + w - r, y)
+    ctx.arcTo(x + w, y, x + w, y + r, r)
+    ctx.lineTo(x + w, y + h - r)
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+    ctx.lineTo(x + r, y + h)
+    ctx.arcTo(x, y + h, x, y + h - r, r)
+    ctx.lineTo(x, y + r)
+    ctx.arcTo(x, y, x + r, y, r)
+    ctx.closePath()
+  }
+
+  /**
+   * 绘制圆角矩形（App/小程序端）
+   */
+  const roundRectApp = (
+    ctx: CanvasContext,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number
+  ) => {
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.lineTo(x + w - r, y)
+    ctx.arcTo(x + w, y, x + w, y + r, r)
+    ctx.lineTo(x + w, y + h - r)
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+    ctx.lineTo(x + r, y + h)
+    ctx.arcTo(x, y + h, x, y + h - r, r)
+    ctx.lineTo(x, y + r)
+    ctx.arcTo(x, y, x + r, y, r)
+    ctx.closePath()
+  }
+
+  /**
+   * 保存海报到相册 - 兼容多端
+   */
+  const savePoster = () => {
+    if (posterTempPath.value == '') {
+      uni.showToast({
+        title: '请等待海报生成',
+        icon: 'none',
+      })
+      return
+    }
+
+    // #ifdef H5
+    // H5 端使用下载方式
+    const link = document.createElement('a')
+    link.href = posterTempPath.value
+    link.download = `职位_${config.value.title}_${Date.now()}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    uni.showToast({
+      title: '下载成功',
+      icon: 'success',
+    })
+    closePoster()
+    // #endif
+
+    // #ifndef H5
+    // App/小程序端保存到相册
+    uni.saveImageToPhotosAlbum({
+      filePath: posterTempPath.value,
+      success: () => {
+        uni.showToast({
+          title: '保存成功',
+          icon: 'success',
+        })
+        closePoster()
+      },
+      fail: (err) => {
+        if (err.errMsg.indexOf('auth deny') !== -1 || err.errMsg.indexOf('authorize') !== -1) {
+          uni.showModal({
+            title: '提示',
+            content: '需要授权保存图片到相册',
+            success: (res) => {
+              if (res.confirm) {
+                uni.openSetting({})
+              }
+            },
+          })
+        } else {
+          uni.showToast({
+            title: '保存失败',
+            icon: 'none',
+          })
+        }
+      },
+    })
+    // #endif
+  }
+
+  /**
+   * 关闭海报弹窗
+   */
+  const closePoster = () => {
+    posterVisible.value = false
+    posterGenerating.value = false
+    canvasReady.value = false
+    posterTempPath.value = ''
+  }
+
+  return {
+    posterVisible,
+    posterGenerating,
+    posterTempPath,
+    posterSize,
+    posterContainerStyle,
+    posterPreviewStyle,
+    canvasStyle,
+    generatePoster,
+    savePoster,
+    closePoster,
+  }
+}

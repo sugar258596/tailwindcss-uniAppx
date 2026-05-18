@@ -1,0 +1,154 @@
+/**
+ * API 配置文件
+ * 统一管理各环境的API地址，避免硬编码
+ */
+
+/**
+ * 环境类型枚举
+ */
+export enum Environment {
+  /** 开发环境 */
+  DEVELOPMENT = 'development',
+  /** 测试环境 */
+  STAGING = 'staging',
+  /** 生产环境 */
+  PRODUCTION = 'production',
+}
+
+/**
+ * API 配置接口
+ */
+export interface ApiConfig {
+  /** HTTP API 基础地址 */
+  baseUrl: string
+  /** WebSocket SignalR 聊天服务地址 */
+  signalRUrl: string
+  /** 超时时间（毫秒） */
+  timeout: number
+}
+
+/**
+ * 环境配置映射
+ */
+const ENV_CONFIG: Record<Environment, ApiConfig> = {
+  [Environment.DEVELOPMENT]: {
+    baseUrl: 'https://miaojieapi.wtvxin.com',
+    signalRUrl: 'https://miaojiews.wtvxin.com/chathub',
+    timeout: 30000,
+  },
+  [Environment.STAGING]: {
+    baseUrl: 'https://miaojieapi.wtvxin.com',
+    signalRUrl: 'https://miaojiews.wtvxin.com/chathub',
+    timeout: 30000,
+  },
+  [Environment.PRODUCTION]: {
+    baseUrl: 'https://miaojieapi.wtvxin.com',
+    signalRUrl: 'https://miaojiews.wtvxin.com/chathub',
+    timeout: 30000,
+  },
+}
+
+/**
+ * 当前环境
+ * 可以通过条件编译或环境变量来设置
+ */
+let currentEnv: Environment = Environment.PRODUCTION
+
+// 条件编译：根据编译模式自动设置环境
+// #ifdef MP-WEIXIN
+// 小程序环境默认使用生产环境
+currentEnv = Environment.PRODUCTION
+// #endif
+
+// #ifdef H5
+// H5环境可以根据域名判断
+if (typeof window !== 'undefined') {
+  const hostname = window.location.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    currentEnv = Environment.DEVELOPMENT
+  } else if (hostname.includes('staging')) {
+    currentEnv = Environment.STAGING
+  } else {
+    currentEnv = Environment.PRODUCTION
+  }
+}
+// #endif
+
+// #ifdef APP-ANDROID || APP-IOS
+// APP环境默认使用生产环境，可以通过setEnvironment修改
+currentEnv = Environment.PRODUCTION
+// #endif
+
+/**
+ * 设置当前环境
+ * @param env 环境类型
+ */
+export function setEnvironment(env: Environment): void {
+  currentEnv = env
+  console.log(`[API Config] 环境已切换为: ${env}`)
+}
+
+/**
+ * 获取当前环境
+ * @returns 当前环境类型
+ */
+export function getCurrentEnvironment(): Environment {
+  return currentEnv
+}
+
+/**
+ * 获取当前环境的 API 配置
+ * @returns API 配置对象
+ */
+export function getApiConfig(): ApiConfig {
+  return ENV_CONFIG[currentEnv]
+}
+
+/**
+ * 获取 HTTP API 基础地址
+ * @returns HTTP API 基础地址
+ */
+export function getBaseUrl(): string {
+  return ENV_CONFIG[currentEnv].baseUrl
+}
+
+/**
+ * 获取 SignalR WebSocket 地址
+ * @returns SignalR WebSocket 地址
+ */
+export function getSignalRUrl(): string {
+  return ENV_CONFIG[currentEnv].signalRUrl
+}
+
+/**
+ * 获取请求超时时间
+ * @returns 超时时间（毫秒）
+ */
+export function getTimeout(): number {
+  return ENV_CONFIG[currentEnv].timeout
+}
+
+/**
+ * 判断是否为开发环境
+ * @returns 是否为开发环境
+ */
+export function isDevelopment(): boolean {
+  return currentEnv === Environment.DEVELOPMENT
+}
+
+/**
+ * 判断是否为生产环境
+ * @returns 是否为生产环境
+ */
+export function isProduction(): boolean {
+  return currentEnv === Environment.PRODUCTION
+}
+
+/**
+ * 打印当前配置（用于调试）
+ */
+export function printConfig(): void {
+  const config = getApiConfig()
+  console.log('[API Config] 当前环境:', currentEnv)
+  console.log('[API Config] 配置信息:', JSON.stringify(config, null, 2))
+}

@@ -1,10 +1,18 @@
 <script setup lang="uts">
+
+	import { useInitStore } from '@/stores'
+
 	// #ifdef APP-ANDROID || APP-HARMONY
 	let firstBackTime = 0
 	// #endif
 
+
+	const initStore = useInitStore()
+
 	onLaunch(() => {
 		console.log('App Launch')
+		// 统一执行应用初始化（包括 app/user/role/auth 以及网站配置）
+		initStore.bootstrap()
 	})
 
 	onAppShow(() => {

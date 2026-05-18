@@ -1,0 +1,28 @@
+export interface Pagination {
+  /** 页码 */
+  Page: number
+  /** 每页条数 */
+  PageSize: number
+}
+
+/** 详情 */
+export interface Detail {
+  Id: number
+}
+
+/** 数组列表 */
+export interface Tables<T> {
+  total: number
+  data: T[]
+}
+/** 数组列表 */
+export interface ReviewTables<T> {
+  total: number
+  data: T
+}
+
+/** 搜索请求参数 */
+export interface SearchParams {
+  /** 搜索关键词 */
+  Keywords: string
+}

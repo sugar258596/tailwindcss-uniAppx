@@ -1,0 +1,342 @@
+/**
+ * useSafeArea - 安全区域 Hook
+ * 处理手机顶部状态栏、底部安全距离、小程序胶囊按钮等适配问题
+ */
+
+// 胶囊按钮信息类型
+export type MenuButtonInfo = {
+  /**
+   * 胶囊按钮高度
+   */
+  height: number
+  /**
+   * 胶囊按钮宽度
+   */
+  width: number
+  /**
+   * 胶囊按钮顶部位置
+   */
+  top: number
+  /**
+   * 胶囊按钮右侧位置
+   */
+  right: number
+  /**
+   * 胶囊按钮底部位置
+   */
+  bottom: number
+  /**
+   * 胶囊按钮左侧位置
+   */
+  left: number
+}
+
+// 安全区域信息类型
+export type SafeAreaInfo = {
+  /**
+   * 状态栏高度
+   */
+  statusBarHeight: number
+  /**
+   * 底部安全区域高度
+   */
+  safeAreaBottom: number
+  /**
+   * 导航栏高度
+   */
+  navBarHeight: number
+  /**
+   * 胶囊按钮信息
+   */
+  menuButton: MenuButtonInfo | null
+
+  /**
+   * 自定义导航栏高度
+   */
+  customNavHeight: number
+  /**
+   * 是否为刘海屏
+   */
+  isNotch: boolean
+  /**
+   * 屏幕宽度
+   */
+  screenWidth: number
+  /**
+   * 屏幕高度
+   */
+  screenHeight: number
+  /**
+   * 是否为小程序平台
+   */
+  isMP: boolean
+  /**
+   * 可用宽度 (屏幕宽度，去除状态栏和底部安全区域)
+   */
+  availableWidth: number
+  /**
+   * 可用高度 (屏幕高度 - 状态栏高度 - 底部安全区域高度)
+   */
+  availableHeight: number
+
+  /**
+   * 像素比
+   */
+  pixelRatio: number
+}
+
+/**
+ * 安全区域 Hook
+ */
+export function useSafeArea() {
+  // 判断是否为小程序平台
+  const checkIsMP = (): boolean => {
+    /* eslint-disable no-unreachable */
+    // #ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ
+    return true
+    // #endif
+    // #ifndef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ
+    return false
+    // #endif
+    /* eslint-enable no-unreachable */
+  }
+
+  const isMP = checkIsMP()
+
+  /**
+   * 获取最新的安全区域信息
+   * 每次调用都重新获取系统信息，避免使用缓存的旧值
+   */
+  const getSafeAreaInfo = (): SafeAreaInfo => {
+    // 获取系统信息
+    const systemInfo = uni.getSystemInfoSync()
+
+    // 状态栏高度
+    const statusBarHeight = systemInfo.statusBarHeight ?? 0
+
+    // 底部安全区域高度
+    let safeAreaBottom = 0
+    if (systemInfo.safeAreaInsets != null) {
+      safeAreaBottom = systemInfo.safeAreaInsets!.bottom ?? 0
+    } else if (systemInfo.safeArea != null) {
+      safeAreaBottom = systemInfo.screenHeight - systemInfo.safeArea!.bottom
+    }
+
+    // 判断是否为刘海屏
+    const isNotch = safeAreaBottom > 0 || statusBarHeight > 20
+
+    // 屏幕尺寸
+    const screenWidth = systemInfo.screenWidth
+    const screenHeight = systemInfo.screenHeight
+
+    // 默认导航栏高度 (状态栏 + 44px)
+    let navBarHeight = statusBarHeight + 44
+    let customNavHeight = statusBarHeight + 44
+
+    // 胶囊按钮信息 (仅小程序)
+    let menuButton: MenuButtonInfo | null = null
+
+    // #ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ
+    const menuButtonInfo = uni.getMenuButtonBoundingClientRect()
+    if (menuButtonInfo != null) {
+      menuButton = {
+        height: menuButtonInfo.height,
+        width: menuButtonInfo.width,
+        top: menuButtonInfo.top,
+        right: menuButtonInfo.right,
+        bottom: menuButtonInfo.bottom,
+        left: menuButtonInfo.left,
+      } as MenuButtonInfo
+
+      // 根据胶囊位置计算自定义导航栏高度
+      const gap = menuButtonInfo.top - statusBarHeight
+      customNavHeight = menuButtonInfo.bottom + gap
+      navBarHeight = customNavHeight
+    }
+    // #endif
+
+    // 计算可用宽度和高度
+    const availableWidth = screenWidth
+    const availableHeight = screenHeight - statusBarHeight - safeAreaBottom
+
+    const pixelRatio = systemInfo.pixelRatio
+
+    // 返回最新的安全区域信息
+    return {
+      statusBarHeight,
+      safeAreaBottom,
+      navBarHeight,
+      menuButton,
+      customNavHeight,
+      isNotch,
+      screenWidth,
+      screenHeight,
+      isMP,
+      availableWidth,
+      availableHeight,
+      pixelRatio,
+    }
+  }
+
+  /**
+   * 获取状态栏高度 (rpx)
+   */
+  const getStatusBarHeightRpx = (): number => {
+    const info = getSafeAreaInfo()
+    return uni.px2rpx(info.statusBarHeight)
+  }
+
+  /**
+   * 获取底部安全区域高度 (rpx)
+   */
+  const getSafeAreaBottomRpx = (): number => {
+    const info = getSafeAreaInfo()
+    return uni.px2rpx(info.safeAreaBottom)
+  }
+
+  /**
+   * 获取导航栏高度 (rpx)
+   */
+  const getNavBarHeightRpx = (): number => {
+    const info = getSafeAreaInfo()
+    return uni.px2rpx(info.navBarHeight)
+  }
+
+  /**
+   * 获取自定义导航栏高度 (rpx)
+   */
+  const getCustomNavHeightRpx = (): number => {
+    const info = getSafeAreaInfo()
+    return uni.px2rpx(info.customNavHeight)
+  }
+
+  /**
+   * 获取胶囊按钮左侧的可用空间宽度 (px)
+   */
+  const getMenuButtonLeftSpace = (): number => {
+    const info = getSafeAreaInfo()
+    if (info.menuButton != null) {
+      return info.menuButton!.left
+    }
+    return info.screenWidth
+  }
+
+  /**
+   * 计算导航栏内容高度 (不包含状态栏，单位: px)
+   * @param customHeight 自定义高度，传 0 使用默认计算
+   */
+  const getNavbarContentHeight = (customHeight: number = 0): number => {
+    if (customHeight > 0) {
+      return customHeight
+    }
+
+    // 小程序使用胶囊高度计算
+    const info = getSafeAreaInfo()
+    if (info.isMP && info.menuButton != null) {
+      return info.menuButton!.height * 1.5
+    }
+
+    // 默认高度 44px
+    return 44
+  }
+
+  /**
+   * 计算导航栏总高度 (包含状态栏，单位: px)
+   * @param customHeight 自定义内容高度，传 0 使用默认计算
+   */
+  const getNavbarTotalHeight = (customHeight: number = 0): number => {
+    const info = getSafeAreaInfo()
+    return info.statusBarHeight + getNavbarContentHeight(customHeight)
+  }
+
+  /**
+   * 获取可用宽度 (px)
+   */
+  const getAvailableWidth = (): number => {
+    const info = getSafeAreaInfo()
+    return info.availableWidth
+  }
+
+  /**
+   * 获取可用高度 (px)
+   */
+  const getAvailableHeight = (): number => {
+    const info = getSafeAreaInfo()
+    return info.availableHeight
+  }
+
+  /**
+   * 获取可用宽度 (rpx)
+   */
+  const getAvailableWidthRpx = (): number => {
+    const info = getSafeAreaInfo()
+    return uni.px2rpx(info.availableWidth)
+  }
+
+  /**
+   * 获取可用高度 (rpx)
+   */
+  const getAvailableHeightRpx = (): number => {
+    const info = getSafeAreaInfo()
+    return uni.px2rpx(info.availableHeight)
+  }
+
+  /**
+   * 获取内容区域高度 (px, 去除状态栏、导航栏和底部安全区域)
+   * @param navHeight 自定义导航栏高度，传 0 使用默认导航栏高度
+   */
+  const getContentHeight = (navHeight: number = 0): number => {
+    const info = getSafeAreaInfo()
+    const totalNavHeight = navHeight > 0 ? navHeight : info.navBarHeight
+    return info.screenHeight - totalNavHeight - info.safeAreaBottom
+  }
+
+  /**
+   * 获取内容区域高度 (rpx)
+   * @param navHeight 自定义导航栏高度，传 0 使用默认导航栏高度
+   */
+  const getContentHeightRpx = (navHeight: number = 0): number => {
+    return uni.px2rpx(getContentHeight(navHeight))
+  }
+
+  /**
+   * 设备像素比
+   */
+  const getPixelRatio = (): number => {
+    const info = getSafeAreaInfo()
+    return info.pixelRatio
+  }
+
+  return {
+    // 获取最新的安全区域信息对象
+    getSafeAreaInfo,
+    // 获取状态栏高度 (rpx)
+    getStatusBarHeightRpx,
+    // 获取底部安全区域高度 (rpx)
+    getSafeAreaBottomRpx,
+    // 获取导航栏高度 (rpx)
+    getNavBarHeightRpx,
+    // 获取自定义导航栏高度 (rpx)
+    getCustomNavHeightRpx,
+    // 获取胶囊按钮左侧的可用空间宽度 (px)
+    getMenuButtonLeftSpace,
+    // 计算导航栏内容高度 (不包含状态栏，单位: px)
+    getNavbarContentHeight,
+    // 计算导航栏总高度 (包含状态栏，单位: px)
+    getNavbarTotalHeight,
+    // 获取可用宽度 (px)
+    getAvailableWidth,
+    // 获取可用高度 (px)
+    getAvailableHeight,
+    // 获取可用宽度 (rpx)
+    getAvailableWidthRpx,
+    // 获取可用高度 (rpx)
+    getAvailableHeightRpx,
+    // 获取内容区域高度 (px)
+    getContentHeight,
+    // 获取内容区域高度 (rpx)
+    getContentHeightRpx,
+    // 设备像素比
+    getPixelRatio,
+  }
+}

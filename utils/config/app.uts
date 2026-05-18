@@ -1,0 +1,174 @@
+/**
+ * 应用常量定义
+ */
+
+/**
+ * 缓存相关常量
+ */
+export const CACHE_CONSTANTS = {
+  /** 默认缓存时长（5分钟） */
+  DEFAULT_DURATION: 5 * 60 * 1000,
+  /** 长缓存时长（30分钟） */
+  LONG_DURATION: 30 * 60 * 1000,
+  /** 短缓存时长（1分钟） */
+  SHORT_DURATION: 1 * 60 * 1000,
+  /** 永久缓存（仅手动清除） */
+  PERSISTENT: -1,
+} as const
+
+/**
+ * 页面相关常量
+ */
+export const PAGE_CONSTANTS = {
+  /** 默认分页大小 */
+  DEFAULT_PAGE_SIZE: 10,
+  /** 最大分页大小 */
+  MAX_PAGE_SIZE: 50,
+  /** 预加载距离（px） */
+  PRELOAD_DISTANCE: 300,
+  /** 下拉刷新触发距离（px） */
+  REFRESH_TRIGGER_DISTANCE: 80,
+} as const
+
+/**
+ * UI 相关常量
+ */
+export const UI_CONSTANTS = {
+  /** 默认动画时长（ms） */
+  DEFAULT_ANIMATION_DURATION: 300,
+  /** 快速动画时长（ms） */
+  FAST_ANIMATION_DURATION: 150,
+  /** 慢速动画时长（ms） */
+  SLOW_ANIMATION_DURATION: 500,
+  /** 默认圆角 */
+  DEFAULT_BORDER_RADIUS: 8,
+  /** 大圆角 */
+  LARGE_BORDER_RADIUS: 16,
+  /** 最大行数限制 */
+  MAX_LINES: 3,
+} as const
+
+/**
+ * 网络请求相关常量
+ */
+export const REQUEST_CONSTANTS = {
+  /** 默认超时时间（ms） */
+  DEFAULT_TIMEOUT: 30000,
+  /** 短超时时间（ms） */
+  SHORT_TIMEOUT: 5000,
+  /** 长超时时间（ms） */
+  LONG_TIMEOUT: 60000,
+  /** 默认重试次数 */
+  DEFAULT_RETRY_COUNT: 3,
+  /** 重试延迟（ms） */
+  RETRY_DELAY: 1000,
+} as const
+
+/**
+ * 存储键常量
+ */
+export const STORAGE_KEYS = {
+  /** 用户 token */
+  TOKEN: 'token',
+  /** 用户信息 */
+  USER_INFO: 'user_info',
+  /** 应用配置 */
+  APP_CONFIG: 'app_config',
+  /** 缓存数据 */
+  CACHE_DATA: 'cache_data',
+  /** 用户角色 */
+  USER_ROLE: 'user_role',
+  /** 主题 */
+  THEME: 'theme',
+  /** 招聘者认证信息 */
+  RECRUITER_AUTH: 'recruiter_auth',
+  /** 招聘者认证状态 */
+  RECRUITER_AUTH_STATUS: 'recruiter_auth_status',
+} as const
+
+/**
+ * 用户角色类型
+ */
+export type UserRole = 'applicant' | 'hire'
+
+/**
+ * 角色常量
+ */
+export const ROLES = {
+  /** 求职者 */
+  APPLICANT: 'applicant' as UserRole,
+  /** 招聘者 */
+  RECRUITER: 'hire' as UserRole,
+} as const
+
+/**
+ * 招聘者审核状态
+ */
+export const AUDIT_STATUS = {
+  /** 审核通过 */
+  APPROVED: 0,
+  /** 账户冻结 */
+  FROZEN: 1,
+  /** 审核中 */
+  PENDING: 2,
+  /** 审核不通过 */
+  REJECTED: 3,
+} as const
+
+/**
+ * 页面路径常量
+ */
+export const PAGE_PATHS = {
+  // 公共页面
+  WELCOME: '/pages/common/welcome/index',
+  ROLE_SELECT: '/pages/common/role-select/index',
+  LOGIN: '/pages/auth/login',
+  REGISTER: '/pages/auth/register',
+  MESSAGE: '/pages/common/message/index',
+
+  // 求职者页面
+  APPLY_HOME: '/pages/apply/tabbar/home/index',
+  APPLY_COMMUNITY: '/pages/apply/tabbar/community/index',
+  APPLY_EARN: '/pages/apply/tabbar/make/index',
+  APPLY_MESSAGE: '/pages/common/message/index',
+  APPLY_PROFILE: '/pages/apply/tabbar/my/index',
+
+  // 招聘者页面
+  RECRUIT_HOME: '/pages/hire/tabbar/home/index',
+  RECRUIT_JOBS: '/pages/hire/tabbar/position/index',
+  RECRUIT_PUBLISH: '/pages/hire/position/publish/index',
+  RECRUIT_MESSAGE: '/pages/common/message/index',
+  RECRUIT_PROFILE: '/pages/hire/tabbar/my/index',
+  RECRUIT_AUTH: '/pages/hire/enterprise/certification/index',
+  WAIT_AUDIT: '/pages/common/auth/wait-audit',
+} as const
+
+/**
+ * 正则表达式常量
+ */
+export const REGEX_CONSTANTS = {
+  /** 手机号正则 */
+  PHONE: /^1[3-9]\d{9}$/,
+  /** 邮箱正则 */
+  EMAIL: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+  /** URL 正则 */
+  URL: /^https?:\/\/[^\s/$.?#].[^\s]*$/,
+  /** 纯数字正则 */
+  NUMBER: /^\d+$/,
+} as const
+
+/**
+ * 日期格式常量
+ */
+export const DATE_FORMATS = {
+  /** 年-月-日 */
+  DATE: 'YYYY-MM-DD',
+  /** 时:分 */
+  TIME: 'HH:mm',
+  /** 年-月-日 时:分 */
+  DATETIME: 'YYYY-MM-DD HH:mm',
+  /** 月-日 */
+  MONTH_DAY: 'MM-DD',
+  /** 相对时间 */
+  RELATIVE: 'relative',
+} as const

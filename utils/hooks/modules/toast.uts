@@ -1,0 +1,96 @@
+/**
+ * Toast 提示工具
+ * 封装 uni.showToast 提供更便捷的调用方式
+ */
+
+/**
+ * Toast 配置选项
+ */
+/**
+ * 显示 Toast 提示
+ */
+const normalizeToastTitle = (value: any, fallback: string = ''): string => {
+  if (typeof value === 'string') return value
+  if (value instanceof Error) return value.message
+  if (value == null) return fallback
+  return String(value)
+}
+
+export function showToast(options: ShowToastOptions | string | Error): void {
+  // 如果传入的是字符串，转换为 ShowToastOptions 对象
+  if (typeof options === 'string' || options instanceof Error) {
+    options = {
+      title: normalizeToastTitle(options),
+      icon: 'none',
+      duration: 2000,
+      mask: false,
+    }
+  }
+
+  const config: ShowToastOptions = {
+    icon: 'none',
+    duration: 2000,
+    mask: false,
+    ...options,
+  }
+  config.title = normalizeToastTitle(config.title)
+  uni.showToast(config)
+}
+/**
+ * 显示成功提示
+ */
+export function showSuccess(
+  title: string,
+  duration: number = 2000,
+  options?: ShowToastOptions
+): void {
+  showToast({
+    title,
+    icon: 'success',
+    duration,
+    ...options,
+  })
+}
+
+/**
+ * 显示错误提示
+ */
+export function showError(
+  title: string | Error,
+  duration: number = 2000,
+  options?: ShowToastOptions
+): void {
+  showToast({
+    title: normalizeToastTitle(title, '操作失败'),
+    icon: 'error',
+    duration,
+  })
+}
+
+/**
+ * 显示加载提示
+ */
+export function showLoading(
+  title: string = '加载中...',
+  mask: boolean = true,
+  options?: ShowToastOptions
+): void {
+  uni.showLoading({
+    title,
+    mask,
+  })
+}
+
+/**
+ * 隐藏加载提示
+ */
+export function hideLoading(): void {
+  uni.hideLoading()
+}
+
+/**
+ * 隐藏 Toast
+ */
+export function hideToast(): void {
+  uni.hideToast()
+}

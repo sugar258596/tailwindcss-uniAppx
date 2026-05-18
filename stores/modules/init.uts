@@ -1,0 +1,90 @@
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+/**
+ * 初始化 Store
+ * 应用启动时统一执行的初始化逻辑
+ * 负责协调各个 store 的初始化顺序与状态管理
+ */
+export const useInitStore = defineStore('init', () => {
+  /** 初始化是否完成 */
+  const initialized = ref(false)
+
+  /** 初始化是否正在进行中 */
+  const loading = ref(false)
+
+  /** 初始化错误信息 */
+  const error = ref('')
+
+  /** 初始化是否成功 */
+  const isReady = computed(() => {
+    return initialized.value && !error.value
+  })
+
+  /** 是否初始化失败 */
+  const isFailed = computed(() => {
+    return initialized.value && error.value !== ''
+  })
+
+  /**
+   * 应用启动初始化
+   * 打开软件时自动执行，统一协调所有 store 的初始化
+   * 执行顺序：
+   * 1. 初始化应用基础配置（拉取网站设置等）
+   * 2. 并行初始化用户信息、角色信息
+   */
+  const bootstrap = async () => {
+    // 防止重复初始化
+    if (initialized.value || loading.value) return
+
+    loading.value = true
+    error.value = ''
+
+    try {
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '应用初始化失败'
+      error.value = errorMsg
+      console.error('[Init] ❌ 应用初始化失败:', err)
+    } finally {
+      loading.value = false
+      initialized.value = true
+    }
+  }
+
+  /**
+   * 重新初始化
+   * 当初始化失败时，可以调用此方法重试
+   */
+  const retry = async () => {
+    initialized.value = false
+    loading.value = false
+    error.value = ''
+    await bootstrap()
+  }
+
+  /**
+   * 重置初始化状态
+   * 用于退出登录等场景，需要重新走初始化流程
+   */
+  const reset = () => {
+    initialized.value = false
+    loading.value = false
+    error.value = ''
+  }
+
+  return {
+    // 状态
+    initialized,
+    loading,
+    error,
+
+    // 计算属性
+    isReady,
+    isFailed,
+
+    // 方法
+    bootstrap,
+    retry,
+    reset,
+  }
+})

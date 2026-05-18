@@ -1,0 +1,96 @@
+import { ref } from 'vue'
+import { increaseShare } from '@/api'
+
+type ShareScene = 'WXSceneSession' | 'WXSceneTimeline'
+
+export interface ShareableCommunityPost {
+  Id: number
+  NickName: string
+  ContentDetails: string
+  Avatar: string
+  ImgList: string[]
+}
+
+interface UseCommunityShareOptions {
+  onShared?: (findId: number) => void
+}
+
+/**
+ * 社区动态分享逻辑
+ * 统一处理分享弹窗、分享上报和本地分享数更新
+ */
+export function useCommunityShare(options: UseCommunityShareOptions = {}) {
+  const showSharePopup = ref(false)
+  const currentPost = ref<ShareableCommunityPost | null>(null)
+
+  const closeSharePopup = () => {
+    showSharePopup.value = false
+  }
+
+  const openSharePopup = (post: ShareableCommunityPost) => {
+    currentPost.value = post
+    showSharePopup.value = true
+  }
+
+  const buildImageUrl = (post: ShareableCommunityPost): string => {
+    return post.ImgList.length > 0 ? post.ImgList[0] : post.Avatar
+  }
+
+  const reportShareSuccess = async (post: ShareableCommunityPost) => {
+    try {
+      await increaseShare({ FindId: post.Id })
+    } catch (err) {
+      console.error('记录分享失败:', err)
+    }
+
+    options.onShared?.(post.Id)
+
+    uni.showToast({
+      title: '分享成功',
+      icon: 'success',
+    })
+  }
+
+  const shareToScene = (scene: ShareScene) => {
+    const post = currentPost.value
+    if (post == null) return
+
+    closeSharePopup()
+
+    uni.share({
+      provider: 'weixin',
+      scene,
+      type: 0,
+      title: scene == 'WXSceneSession' ? `${post.NickName}的动态` : post.ContentDetails,
+      summary: post.ContentDetails,
+      imageUrl: buildImageUrl(post),
+      success: async () => {
+        await reportShareSuccess(post)
+      },
+      fail: (err) => {
+        console.error('分享失败:', err)
+        uni.showToast({
+          title: '分享失败',
+          icon: 'none',
+        })
+      },
+    })
+  }
+
+  const handleShareToFriend = () => {
+    shareToScene('WXSceneSession')
+  }
+
+  const handleShareToMoments = () => {
+    shareToScene('WXSceneTimeline')
+  }
+
+  return {
+    showSharePopup,
+    currentPost,
+    openSharePopup,
+    closeSharePopup,
+    handleShareToFriend,
+    handleShareToMoments,
+  }
+}

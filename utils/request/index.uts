@@ -1,0 +1,91 @@
+import { HttpRequest } from 'tang-ui-x/utils/request/index.uts'
+
+import { useAuthStore } from '@/stores'
+
+import { getBaseUrl, showError } from '@/utils'
+
+// 创建请求实例
+const request = new HttpRequest({
+  baseURL: getBaseUrl(), // 替换为你的 API 地址
+  showLoading: false,
+  autoAuth: false,
+  timeout: 50000,
+})
+
+// 配置拦截器
+request.setInterceptors({
+  // 请求拦截器
+  request: (options) => {
+    const header = {} as UTSJSONObject
+    if (options.header != null) {
+      for (const key in options.header) {
+        header[key] = options.header[key]
+      }
+    }
+    header['Custom-Header'] = 'custom-value'
+    // const userStore = useAuthStore()
+    // const tokenValue = userStore.tokenValue
+    const data = {
+      ...options.data,
+      // UserId: tokenValue?.UserId ?? '',
+      // Token: tokenValue?.Token ?? '',
+    }
+
+    return {
+      ...options,
+      header,
+      data,
+    }
+  },
+
+  // 响应拦截器
+  response: (response, options) => {
+    const { code, msg } = response
+
+    if (code === 2 || code === 401 || code === 403) {
+      // 如果是自定义错误，直接返回
+      if (options.customError == true) {
+        return Promise.reject({ code, msg })
+      }
+
+      const authStore = useAuthStore()
+      authStore.logout()
+
+      const authErrorMsg = msg ?? '登录已过期，请重新登录'
+      showError(authErrorMsg)
+      return Promise.reject(new Error(authErrorMsg))
+    }
+
+    if (code === 0) {
+      if (options.isTotal == true) {
+        return {
+          data: Array.isArray(response.data) ? response.data : [],
+          total: response.count ?? 0,
+        }
+      } else {
+        return response.data
+      }
+    }
+    const serverErrorMsg = msg ?? '服务器异常，请稍后重试'
+    showError(serverErrorMsg)
+    return Promise.reject(new Error(msg ?? '服务器异常'))
+  },
+  // 错误拦截器
+  error: (error, options) => {
+    console.log('错误拦截器', error, options)
+    if (options.customError == true && error.response != null) {
+      const resData = error.response.data as UTSJSONObject
+      const code = resData['code'] ?? error.response.statusCode
+      const msg = resData['msg'] ?? error.message
+      return Promise.reject({ code, msg })
+    }
+    return Promise.reject(error)
+  },
+})
+
+export const HttpsRequest = new HttpRequest({
+  baseURL: getBaseUrl(),
+})
+
+// 导出实例
+export { request }

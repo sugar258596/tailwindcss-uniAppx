@@ -1,0 +1,201 @@
+import { ref, computed } from 'vue'
+
+/**
+ * 购物车选择管理Hook
+ * 提供购物车商品的多选、全选等功能
+ */
+export function useCartSelection() {
+  // 选中的商品集合，格式: "shopId_productId" -> boolean
+  const selectedItems = ref<UTSJSONObject>({})
+
+  // 选中的店铺集合，格式: "shopId" -> boolean
+  const selectedShops = ref<UTSJSONObject>({})
+
+  /**
+   * 设置购物车数据，重置选择状态
+   */
+  const setCartData = (cartData: UTSJSONObject | null) => {
+    if (!cartData?.CartList) {
+      selectedItems.value = {}
+      selectedShops.value = {}
+      return
+    }
+
+    // 重置选择状态
+    selectedItems.value = {}
+    selectedShops.value = {}
+
+    // 默认选中所有有效商品
+    cartData.CartList.forEach((shop) => {
+      selectedShops.value[shop.ShopId] = true
+      if (shop.ProData) {
+        shop.ProData.forEach((product) => {
+          if (product.Isinvalid === 0) {
+            const key = `${shop.ShopId}_${product.Id}`
+            selectedItems.value[key] = true
+          }
+        })
+      }
+    })
+  }
+
+  /**
+   * 切换单个商品选中状态
+   */
+  const toggleProduct = (shopId: string, productId: number, cartData: UTSJSONObject | null) => {
+    const key = `${shopId}_${productId}`
+    selectedItems.value[key] = !selectedItems.value[key]
+
+    // 更新店铺选中状态
+    updateShopSelection(shopId, cartData)
+  }
+
+  /**
+   * 切换店铺选中状态
+   */
+  const toggleShop = (shopId: string, cartData: UTSJSONObject | null) => {
+    selectedShops.value[shopId] = !selectedShops.value[shopId]
+
+    // 选中/取消选中店铺下所有有效商品
+    const shouldSelect = selectedShops.value[shopId]
+    setShopProductsSelection(shopId, shouldSelect, cartData)
+  }
+
+  /**
+   * 切换全局全选状态
+   */
+  const toggleAll = (cartData: UTSJSONObject | null) => {
+    if (!cartData?.CartList) return
+
+    const currentAllSelected = isAllSelected.value
+    const newSelectionState = !currentAllSelected
+
+    selectedShops.value = {}
+    selectedItems.value = {}
+
+    cartData.CartList.forEach((shop) => {
+      selectedShops.value[shop.ShopId] = newSelectionState
+      if (shop.ProData) {
+        shop.ProData.forEach((product) => {
+          if (product.Isinvalid === 0) {
+            const key = `${shop.ShopId}_${product.Id}`
+            selectedItems.value[key] = newSelectionState
+          }
+        })
+      }
+    })
+  }
+
+  /**
+   * 检查商品是否选中
+   */
+  const isProductSelected = (shopId: string, productId: number): boolean => {
+    const key = `${shopId}_${productId}`
+    return selectedItems.value[key] === true
+  }
+
+  /**
+   * 检查店铺是否选中
+   */
+  const isShopSelected = (shopId: string): boolean => {
+    return selectedShops.value[shopId] === true
+  }
+
+  /**
+   * 获取选中的商品列表
+   */
+  const getSelectedProducts = (cartData: UTSJSONObject | null) => {
+    if (!cartData?.CartList) return []
+
+    const selectedProducts: any[] = []
+
+    cartData.CartList.forEach((shop) => {
+      if (shop.ProData) {
+        shop.ProData.forEach((product) => {
+          if (product.Isinvalid === 0 && isProductSelected(shop.ShopId, product.Id)) {
+            selectedProducts.push(product)
+          }
+        })
+      }
+    })
+
+    return selectedProducts
+  }
+
+  /**
+   * 更新店铺选中状态（基于商品选中状态）
+   */
+  const updateShopSelection = (shopId: string, cartData: UTSJSONObject | null) => {
+    if (!cartData?.CartList) return
+
+    const shop = cartData.CartList.find((s) => s.ShopId === shopId)
+    if (!shop?.ProData) return
+
+    // 检查店铺下所有有效商品是否都选中
+    const allValidProductsSelected = shop.ProData.filter(
+      (product) => product.Isinvalid === 0
+    ).every((product) => isProductSelected(shopId, product.Id))
+
+    selectedShops.value[shopId] = allValidProductsSelected
+  }
+
+  /**
+   * 设置店铺下所有商品的选中状态
+   */
+  const setShopProductsSelection = (
+    shopId: string,
+    selected: boolean,
+    cartData: UTSJSONObject | null
+  ) => {
+    if (!cartData?.CartList) return
+
+    const shop = cartData.CartList.find((s) => s.ShopId === shopId)
+    if (!shop?.ProData) return
+
+    shop.ProData.forEach((product) => {
+      if (product.Isinvalid === 0) {
+        const key = `${shopId}_${product.Id}`
+        selectedItems.value[key] = selected
+      }
+    })
+  }
+
+  // 计算属性：是否全选
+  const isAllSelected = computed(() => {
+    const shops = Object.keys(selectedShops.value)
+    if (shops.length === 0) return false
+
+    // 检查是否有店铺未被选中
+    return !shops.some((shopId) => selectedShops.value[shopId] !== true)
+  })
+
+  // 计算属性：选中商品数量
+  const selectedCount = computed(() => {
+    let count = 0
+    for (const key in selectedItems.value) {
+      if (selectedItems.value[key] === true) {
+        count++
+      }
+    }
+    return count
+  })
+
+  return {
+    // 状态
+    selectedItems,
+    selectedShops,
+
+    // 方法
+    setCartData,
+    toggleProduct,
+    toggleShop,
+    toggleAll,
+    isProductSelected,
+    isShopSelected,
+    getSelectedProducts,
+
+    // 计算属性
+    isAllSelected,
+    selectedCount,
+  }
+}

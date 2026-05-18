@@ -1,0 +1,142 @@
+import { request } from '@/utils'
+
+import type { Pagination, Tables, Detail } from '@/api/type'
+
+/** 获取省市区街道 */
+export interface GetAddressesParams {
+  /** 父级区域编码 */
+  Code?: string
+  /** 查询级别 Province-省 City-市 District-区 */
+  Types: 'Province' | 'City' | 'District'
+}
+/** 获取省市区街道 */
+export interface GetAddressesResult {
+  /** 区域编码 */
+  Code?: string
+  /** 区域名称 */
+  Name?: string
+}
+/** 添加地址 */
+export interface AddAddressParams {
+  Id?: number
+  /** 收货人名字 */
+  Consignee: string
+  /** 收货人联系电话 */
+  Mobile: string
+  /** 是否定位信息 1-是 0-否 */
+  IsLocal: 0 | 1
+  /** 省份编码 */
+  ProvinceCode: string
+  /** 省份名称 */
+  ProvinceName: string
+  /** 市编码 */
+  CityCode: string
+  /** 市名称 */
+  CityName: string
+  /** 区编码 */
+  DistrictCode: string
+  /** 区名称 */
+  DistrictName: string
+  /** 街道编码 */
+  StreetCode?: string
+  /** 街道名称 */
+  StreetName?: string
+  /** 详细地址 */
+  FullAddress: string
+  /** 定位详细地址 */
+  Addr: string
+  /** 定位地名 */
+  AddrName: string
+  /** 默认标记 1-是 0-否 */
+  IsDefault: 0 | 1
+  /** 邮编 */
+  PostCode: string
+  /** 详细地址 */
+  Address?: string
+}
+
+/** 收货地址 */
+export interface GetAddressListResult {
+  /** 地址 */
+  Addr?: string
+  /** 地址名称 */
+  AddrName?: string
+  /** 详细地址 */
+  Address?: string
+  /** 收货人 */
+  Consignee?: string
+  /** 地址ID */
+  Id?: number
+  /** 是否默认：1-是，0-否 */
+  IsDefault?: number
+  /** 是否本地 */
+  IsLocal?: number
+  /** 纬度 */
+  Lat?: number
+  /** 经度 */
+  Lng?: number
+  /** 收货号码 */
+  Mobile?: string
+  /** 省份编码 */
+  ProvinceCode?: string
+}
+
+enum Api {
+  /**省市区街道 */
+  GET_ADDRESSES = '/api/Area/GetArea',
+
+  /** 添加地址 */
+  ADD_ADDRESS = '/api/Address/AddAddress',
+
+  /** 修改地址 */
+  EDIT_ADDRESS = '/api/Address/UpdateAddress',
+
+  /** 删除地址 */
+  DELETE_ADDRESS = '/api/Address/DeleteAddress',
+
+  /** 获取地址详情 */
+  GET_ADDRESS_DETAIL = '/api/Address/GetInfo',
+
+  /** 设置默认地址 */
+  SET_DEFAULT_ADDRESS = '/api/Address/SetDefaultaddress',
+
+  /** 获取地址列表 */
+  GET_ADDRESS_LIST = '/api/Address/AddressList',
+}
+
+/** 获取省市区街道 */
+export function getAddresses(params: GetAddressesParams) {
+  return request.post<GetAddressesResult[]>(Api.GET_ADDRESSES, params)
+}
+
+/** 添加地址 */
+export function addAddress(params: AddAddressParams) {
+  return request.post<AddAddressParams>(Api.ADD_ADDRESS, params)
+}
+
+/** 修改地址 */
+export function editAddress(params: AddAddressParams) {
+  return request.post<AddAddressParams>(Api.EDIT_ADDRESS, params)
+}
+
+/** 删除地址 */
+export function deleteAddress(params: Detail) {
+  return request.post<AddAddressParams>(Api.DELETE_ADDRESS, params)
+}
+
+/** 获取地址详情 */
+export function getAddressDetail(params: Detail) {
+  return request.post<AddAddressParams>(Api.GET_ADDRESS_DETAIL, params)
+}
+
+/** 设置默认地址 */
+export function setDefaultAddress(params: Detail) {
+  return request.post<AddAddressParams>(Api.SET_DEFAULT_ADDRESS, params)
+}
+
+/** 获取地址列表 */
+export function getAddressList(params: Pagination) {
+  return request.post<Tables<GetAddressListResult>>(Api.GET_ADDRESS_LIST, params, {
+    isTotal: true,
+  })
+}

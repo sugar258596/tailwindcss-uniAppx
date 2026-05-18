@@ -1,0 +1,870 @@
+/**
+ * 海报生成 Hook
+ * 封装 Canvas 海报绘制功能，支持图片加载、文字绘制、二维码生成
+ */
+
+import { reactive, ref } from 'vue'
+
+// ==================== 常量配置 ====================
+
+/** 海报样式常量 */
+const POSTER_CONSTANTS = {
+  // 头像配置
+  AVATAR_SIZE: 50,
+  AVATAR_PADDING: 10,
+  AVATAR_BORDER_WIDTH: 3,
+  AVATAR_BORDER_COLOR: '#ffffff',
+  AVATAR_TEXT_X_OFFSET: 15,
+  AVATAR_FONT: 'bold 14px sans-serif',
+  AVATAR_LINE_HEIGHT: 22,
+
+  // 二维码配置
+  QR_SIZE: 60,
+  QR_PADDING: 20,
+  QR_BG_PADDING: 5,
+  QR_BG_COLOR: '#ffffff',
+  QR_TEXT_X_OFFSET: 15,
+  QR_FONT: '14px sans-serif',
+  QR_LINE_HEIGHT: 20,
+
+  // 文字样式
+  TEXT_COLOR: '#ffffff',
+  TEXT_SHADOW_COLOR: 'rgba(0, 0, 0, 0.5)',
+  TEXT_SHADOW_WIDTH: 3,
+
+  // 渲染延迟
+  CANVAS_RENDER_DELAY: 300,
+  EXPORT_DELAY: 100,
+  IMAGE_LOAD_DELAY: 100,
+} as const
+
+/** 图片类型枚举 */
+enum ImageType {
+  BACKGROUND = 'background',
+  AVATAR = 'avatar',
+  QR_CODE = 'qrCode',
+}
+
+/** 图片信息类型 */
+type ImageInfo = {
+  url: string
+  type: ImageType
+  name: string
+}
+
+// ==================== 类型定义 ====================
+
+interface TextLine {
+  line1: string
+  line2: string
+}
+
+export type PosterConfig = {
+  canvasWidth: number
+  canvasHeight: number
+  backgroundUrl: string
+  avatarUrl: string
+  qrCodeUrl: string
+  inviteCode: string
+  avatarText: TextLine
+  qrCodeText: TextLine
+  /** 顶部导航栏偏移量（状态栏高度 + 导航栏高度），绘制时从此位置下方开始 (px)，默认为 0 */
+  capsuleOffset?: number
+}
+
+/**
+ * usePoster Hook 参数
+ */
+export type UsePosterOptions = {
+  canvasId: string
+  posterConfig: PosterConfig
+  getPixelRatio: () => number
+  queryIn?: any | null
+}
+
+/**
+ * usePoster Hook 返回值
+ */
+export type UsePosterReturn = {
+  /** 是否显示海报弹窗 */
+  showPosterModal: Ref<boolean>
+  /** Canvas 是否准备好 */
+  canvasReady: Ref<boolean>
+  /** 导出的图片路径 */
+  exportedImagePath: Ref<string>
+  /** 背景图片路径 */
+  backgroundPath: Ref<string>
+  /** 头像图片路径 */
+  avatarPath: Ref<string>
+  /** 二维码图片路径 */
+  qrCodePath: Ref<string>
+
+  /** * 加载图片到本地  */
+  loadImages: () => Promise<void>
+  /** * 创建图片对象  */
+  createImageObject: (canvas: UniApp.Node) => any
+  /** * 绘制背景图  */
+  drawBackgroundImage: (ctx: CanvasRenderingContext2D, canvas: UniApp.Node) => Promise<void>
+  /** * 绘制头像  */
+  drawAvatar: (ctx: CanvasRenderingContext2D, canvas: UniApp.Node) => Promise<void>
+  /** * 绘制二维码  */
+  drawQRCode: (ctx: CanvasRenderingContext2D, canvas: UniApp.Node) => Promise<void>
+  /** * 绘制海报  */
+  drawPoster: () => Promise<string>
+  /** * 生成海报  */
+  generatePoster: () => Promise<string>
+  /** * 导出 Canvas 为图片  */
+  exportCanvasAsImage: () => void
+  /** * 预览图片  */
+  previewImage: () => void
+  /** * 保存图片  */
+  saveImage: () => void
+  /** * 分享海报  */
+  handlePosterShare: (posterPath: string) => void
+  /** * 关闭弹窗  */
+  handleClose: () => void
+}
+
+/**
+ * 海报生成 Hook
+ * @param options 配置参数
+ * @returns 海报生成相关状态和方法
+ */
+export function usePoster(options: UsePosterOptions): UsePosterReturn {
+  // 解构配置
+  const { canvasId, posterConfig, getPixelRatio, queryIn = null } = options
+
+  // 状态管理
+  const showPosterModal = ref(false)
+  const canvasReady = ref(false)
+  const exportedImagePath = ref('')
+  const backgroundPath = ref('')
+  const avatarPath = ref('')
+  const qrCodePath = ref('')
+
+  const createCanvasQuery = () => {
+    const query = uni.createSelectorQuery()
+    if (queryIn != null) {
+      query.in(queryIn)
+    }
+    return query
+  }
+
+  // ==================== 工具函数 ====================
+
+  /**
+   * 延迟执行
+   */
+  const delay = (ms: number): Promise<void> => {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * 统一的错误提示
+   */
+  const showError = (title: string, icon: 'error' | 'none' = 'error'): void => {
+    uni.showToast({ title, icon })
+  }
+
+  /**
+   * 统一的成功提示
+   */
+  const showSuccess = (title: string): void => {
+    uni.showToast({ title, icon: 'success' })
+  }
+
+  /**
+   * 确保已导出图片
+   */
+  const ensureImageExported = async (): Promise<boolean> => {
+    if (exportedImagePath.value !== '') {
+      return true
+    }
+
+    console.log('图片未导出，正在从 Canvas 生成文件...')
+    uni.showLoading({ title: '正在生成图片...', mask: true })
+
+    try {
+      await exportCanvasAsImage()
+      uni.hideLoading()
+      return !!exportedImagePath.value
+    } catch (err) {
+      uni.hideLoading()
+      console.error('❌ 图片生成失败:', err)
+      return false
+    }
+  }
+
+  /**
+   * 下载单个图片
+   */
+  const downloadImage = (imageInfo: ImageInfo): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      console.log(`下载${imageInfo.name}:`, imageInfo.url)
+
+      uni.downloadFile({
+        url: imageInfo.url,
+        success: (res) => {
+          if (res.statusCode === 200) {
+            console.log(`✅ ${imageInfo.name}下载成功:`, res.tempFilePath)
+            resolve(res.tempFilePath)
+          } else {
+            const error = `${imageInfo.name}下载失败(状态码:${res.statusCode})`
+            console.error(`❌ ${error}`)
+            reject(new Error(error))
+          }
+        },
+        fail: (err) => {
+          const error = `${imageInfo.name}下载失败`
+          console.error(`❌ ${error}:`, err)
+          reject(new Error(error))
+        },
+      })
+    })
+  }
+
+  // ==================== 绘制函数 ====================
+
+  /**
+   * 绘制文字
+   */
+  const drawTextLines = (
+    ctx: CanvasRenderingContext2D,
+    textX: number,
+    centerY: number,
+    lines: string[],
+    font: string,
+    lineHeight: number
+  ) => {
+    const totalTextHeight = lineHeight * lines.length
+    const textStartY = centerY - totalTextHeight / 2 + lineHeight / 2
+
+    // 设置文字样式
+    ctx.fillStyle = '#ffffff'
+    ctx.font = font
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+
+    // 绘制文字阴影
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.lineWidth = 3
+    lines.forEach((line, index) => {
+      ctx.strokeText(line, textX, textStartY + index * lineHeight)
+    })
+
+    // 绘制白色文字
+    lines.forEach((line, index) => {
+      ctx.fillText(line, textX, textStartY + index * lineHeight)
+    })
+  }
+
+  /**
+   * 加载图片到本地
+   */
+  const loadImages = async (): Promise<void> => {
+    // #ifdef H5
+    // H5 平台：直接使用 URL
+    console.log('H5 平台：使用网络图片')
+    backgroundPath.value = posterConfig.backgroundUrl
+    avatarPath.value = posterConfig.avatarUrl
+    qrCodePath.value = posterConfig.qrCodeUrl
+    // #endif
+
+    // #ifndef H5
+    // App 平台：下载所有图片到本地
+    console.log('App 平台：开始下载图片...')
+
+    const images: ImageInfo[] = [
+      { url: posterConfig.backgroundUrl, type: ImageType.BACKGROUND, name: '背景图' },
+      { url: posterConfig.avatarUrl, type: ImageType.AVATAR, name: '头像' },
+      { url: posterConfig.qrCodeUrl, type: ImageType.QR_CODE, name: '二维码' },
+    ]
+
+    try {
+      const results = await Promise.all(images.map((img) => downloadImage(img)))
+
+      backgroundPath.value = results[0]
+      avatarPath.value = results[1]
+      qrCodePath.value = results[2]
+
+      console.log('✅ 所有图片下载成功')
+      console.log('背景图:', backgroundPath.value)
+      console.log('头像:', avatarPath.value)
+      console.log('二维码:', qrCodePath.value)
+    } catch (err) {
+      console.error('❌ 图片下载失败:', err)
+      throw err
+    }
+    // #endif
+  }
+
+  /**
+   * 创建图片对象
+   */
+  const createImageObject = (canvas: UniApp.Node): any => {
+    /* eslint-disable no-unreachable */
+    // #ifdef H5
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    return img
+    // #endif
+
+    // #ifndef H5
+    return canvas.createImage()
+    // #endif
+    /* eslint-enable no-unreachable */
+  }
+
+  /**
+   * 绘制背景图
+   */
+  const drawBackgroundImage = (
+    ctx: CanvasRenderingContext2D,
+    canvas: UniApp.Node
+  ): Promise<void> => {
+    return new Promise((resolve) => {
+      if (backgroundPath.value == '') {
+        resolve()
+        return
+      }
+
+      const img = createImageObject(canvas)
+
+      img.onload = () => {
+        // 获取导航栏偏移量，默认为 0
+        const capsuleOffset = posterConfig.capsuleOffset ?? 0
+
+        // 从偏移位置开始绘制，高度保持不变
+        ctx.drawImage(img, 0, capsuleOffset, posterConfig.canvasWidth, posterConfig.canvasHeight)
+
+        console.log('✅ 背景图绘制完成')
+
+        resolve()
+      }
+
+      img.onerror = () => {
+        resolve()
+      }
+
+      img.src = backgroundPath.value
+    })
+  }
+
+  /**
+   * 绘制头像
+   */
+  const drawAvatar = (ctx: CanvasRenderingContext2D, canvas: UniApp.Node): Promise<void> => {
+    return new Promise((resolve) => {
+      if (avatarPath.value == '') {
+        resolve()
+        return
+      }
+
+      const img = createImageObject(canvas)
+
+      img.onload = () => {
+        const {
+          AVATAR_SIZE,
+          AVATAR_PADDING,
+          AVATAR_BORDER_WIDTH,
+          AVATAR_BORDER_COLOR,
+          AVATAR_TEXT_X_OFFSET,
+          AVATAR_FONT,
+          AVATAR_LINE_HEIGHT,
+        } = POSTER_CONSTANTS
+
+        // 获取导航栏偏移量，默认为 0
+        const capsuleOffset = posterConfig.capsuleOffset ?? 0
+
+        const x = AVATAR_PADDING
+        const y = AVATAR_PADDING + capsuleOffset
+
+        // 保存状态
+        ctx.save()
+
+        // 绘制圆形裁剪
+        ctx.beginPath()
+        ctx.arc(x + AVATAR_SIZE / 2, y + AVATAR_SIZE / 2, AVATAR_SIZE / 2, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.clip()
+
+        // 绘制头像
+        ctx.drawImage(img, x, y, AVATAR_SIZE, AVATAR_SIZE)
+
+        // 恢复状态
+        ctx.restore()
+
+        // 绘制边框
+        ctx.strokeStyle = AVATAR_BORDER_COLOR
+        ctx.lineWidth = AVATAR_BORDER_WIDTH
+        ctx.beginPath()
+        ctx.arc(x + AVATAR_SIZE / 2, y + AVATAR_SIZE / 2, AVATAR_SIZE / 2, 0, 2 * Math.PI)
+        ctx.stroke()
+
+        // 绘制右侧文字
+        const textX = x + AVATAR_SIZE + AVATAR_TEXT_X_OFFSET
+        const avatarCenterY = y + AVATAR_SIZE / 2
+        drawTextLines(
+          ctx,
+          textX,
+          avatarCenterY,
+          [posterConfig.avatarText.line1, posterConfig.avatarText.line2],
+          AVATAR_FONT,
+          AVATAR_LINE_HEIGHT
+        )
+
+        resolve()
+      }
+
+      img.onerror = () => {
+        resolve()
+      }
+
+      img.src = avatarPath.value
+    })
+  }
+
+  /**
+   * 绘制二维码
+   */
+  const drawQRCode = (ctx: CanvasRenderingContext2D, canvas: UniApp.Node): Promise<void> => {
+    return new Promise((resolve) => {
+      if (qrCodePath.value == '') {
+        resolve()
+        return
+      }
+
+      const img = createImageObject(canvas)
+
+      img.onload = () => {
+        const {
+          QR_SIZE,
+          QR_PADDING,
+          QR_BG_PADDING,
+          QR_BG_COLOR,
+          QR_TEXT_X_OFFSET,
+          QR_FONT,
+          QR_LINE_HEIGHT,
+        } = POSTER_CONSTANTS
+
+        // 获取导航栏偏移量，默认为 0
+        const capsuleOffset = posterConfig.capsuleOffset ?? 0
+
+        const x = QR_PADDING
+        // 二维码从底部向上计算（Canvas 总高度 = 原始高度 + 偏移量）
+        const actualCanvasHeight = posterConfig.canvasHeight + capsuleOffset
+        const y = actualCanvasHeight - QR_SIZE - QR_PADDING
+
+        console.log('绘制二维码位置:', {
+          actualCanvasHeight: actualCanvasHeight,
+          qrY: y,
+        })
+
+        // 绘制白色背景
+        ctx.fillStyle = QR_BG_COLOR
+        ctx.fillRect(
+          x - QR_BG_PADDING,
+          y - QR_BG_PADDING,
+          QR_SIZE + QR_BG_PADDING * 2,
+          QR_SIZE + QR_BG_PADDING * 2
+        )
+
+        // 绘制二维码
+        ctx.drawImage(img, x, y, QR_SIZE, QR_SIZE)
+
+        // 绘制右侧文字
+        const textX = x + QR_SIZE + QR_TEXT_X_OFFSET
+        const qrCenterY = y + QR_SIZE / 2
+        drawTextLines(
+          ctx,
+          textX,
+          qrCenterY,
+          [posterConfig.qrCodeText.line1, posterConfig.qrCodeText.line2],
+          QR_FONT,
+          QR_LINE_HEIGHT
+        )
+
+        resolve()
+      }
+
+      img.onerror = () => {
+        resolve()
+      }
+
+      img.src = qrCodePath.value
+    })
+  }
+
+  /**
+   * 绘制 Canvas
+   */
+  const drawPoster = (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const query = createCanvasQuery()
+      query
+        .select(`#${canvasId}`)
+        .fields({ node: true, size: true })
+        .exec(async (res) => {
+          if (!res[0]) {
+            console.error('❌ Canvas 节点获取失败')
+            reject(new Error('Canvas 节点获取失败'))
+            return
+          }
+
+          const canvas = res[0].node
+          const ctx = canvas.getContext('2d')
+
+          if (ctx == null) {
+            console.error('❌ Canvas 上下文获取失败')
+            reject(new Error('Canvas 上下文获取失败'))
+            return
+          }
+
+          console.log('✅ Canvas 节点和上下文获取成功')
+
+          // 获取偏移量
+          const capsuleOffset = posterConfig.capsuleOffset ?? 0
+
+          // 设置 Canvas 尺寸：高度增加偏移量
+          const dpr = getPixelRatio()
+          const actualCanvasHeight = posterConfig.canvasHeight + capsuleOffset
+          canvas.width = posterConfig.canvasWidth * dpr
+          canvas.height = actualCanvasHeight * dpr
+          ctx.scale(dpr, dpr)
+
+          console.log('Canvas 实际尺寸:', {
+            width: posterConfig.canvasWidth,
+            heightWithOffset: actualCanvasHeight,
+            offset: capsuleOffset,
+          })
+
+          // 清空画布并填充背景色
+          ctx.clearRect(0, 0, posterConfig.canvasWidth, actualCanvasHeight)
+
+          // 填充透明背景（避免白色）
+          ctx.fillStyle = 'transparent'
+          ctx.fillRect(0, 0, posterConfig.canvasWidth, actualCanvasHeight)
+
+          try {
+            console.log('开始绘制背景图...')
+            await drawBackgroundImage(ctx, canvas)
+            console.log('✅ 背景图绘制完成')
+
+            console.log('开始绘制头像...')
+            await drawAvatar(ctx, canvas)
+            console.log('✅ 头像绘制完成')
+
+            console.log('开始绘制二维码...')
+            await drawQRCode(ctx, canvas)
+            console.log('✅ 二维码绘制完成')
+
+            // 等待 Canvas 完成渲染
+            // 在真机环境下，Canvas 绘制后需要时间渲染到画布上
+            console.log('等待 Canvas 渲染...')
+            await delay(POSTER_CONSTANTS.CANVAS_RENDER_DELAY)
+
+            // 不立即导出文件，只在保存或分享时才导出
+            console.log('✅ 海报绘制完成（未生成文件）')
+
+            // 标记 Canvas 已准备好
+            canvasReady.value = true
+
+            // 返回成功标识，而不是文件路径
+            resolve('canvas_ready')
+          } catch (err) {
+            console.error('❌ 绘制过程出错:', err)
+            reject(err)
+          }
+        })
+    })
+  }
+
+  /**
+   * 生成海报
+   */
+  const generatePoster = async (): Promise<string> => {
+    try {
+      uni.showLoading({ title: '生成海报中...' })
+
+      console.log('=== 开始生成海报 ===')
+
+      console.log('步骤 1: 加载图片...')
+      await loadImages()
+      console.log('✅ 图片加载完成')
+
+      // 给图片一点时间确保完全加载
+      await delay(POSTER_CONSTANTS.IMAGE_LOAD_DELAY)
+
+      console.log('步骤 2: 绘制海报...')
+      const imagePath = await drawPoster()
+      console.log('✅ 海报生成完成:', imagePath)
+      return imagePath
+    } catch (err) {
+      console.error('❌ 海报生成失败:', err)
+      // 图片获取失败，直接关闭弹窗
+      handleClose()
+      throw err
+    } finally {
+      uni.hideLoading()
+    }
+  }
+
+  /**
+   * 生成临时文件
+   */
+  const exportCanvasAsImage = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      // 使用 setTimeout 确保在下一帧执行，让 Canvas 有时间完成渲染
+      setTimeout(() => {
+        const query = createCanvasQuery()
+        query
+          .select(`#${canvasId}`)
+          .fields({ node: true })
+          .exec((res) => {
+            if (!res[0] || !res[0].node) {
+              console.error('❌ 导出时 Canvas 节点获取失败')
+              showError('导出失败')
+              reject(new Error('Canvas 节点获取失败'))
+              return
+            }
+
+            const canvas = res[0].node
+
+            try {
+              console.log('正在转换 Canvas 为图片...')
+              const dataURL = canvas.toDataURL('image/png')
+
+              if (!dataURL || dataURL === 'data:,') {
+                console.error('❌ Canvas 转换失败，可能还未渲染完成')
+                showError('Canvas 渲染未完成')
+                reject(new Error('Canvas 转换失败'))
+                return
+              }
+
+              // 提取 base64 数据
+              const base64 = dataURL.split(',')[1]
+
+              // #ifdef H5
+              exportedImagePath.value = `data:image/png;base64,${base64}`
+              console.log('✅ H5 平台图片导出成功')
+              resolve()
+              // #endif
+
+              // #ifndef H5
+              const userDataPath = uni.env?.USER_DATA_PATH ?? ''
+              const filePath = `${userDataPath}/canvas_${Date.now()}.png`
+              console.log('正在保存文件到:', filePath)
+
+              uni.getFileSystemManager().writeFile({
+                filePath,
+                data: base64,
+                encoding: 'base64',
+                success: () => {
+                  exportedImagePath.value = filePath
+                  console.log('✅ 文件保存成功:', filePath)
+                  resolve()
+                },
+                fail: (err) => {
+                  console.error('❌ 文件保存失败:', err)
+                  showError('导出失败')
+                  reject(err)
+                },
+              })
+              // #endif
+            } catch (err) {
+              console.error('❌ 导出过程出错:', err)
+              showError('导出失败')
+              reject(err)
+            }
+          })
+      }, POSTER_CONSTANTS.EXPORT_DELAY)
+    })
+  }
+
+  /**
+   * 预览图片
+   */
+  const previewImage = async (): Promise<void> => {
+    console.log('=== 预览图片 ===')
+
+    try {
+      const hasImage = await ensureImageExported()
+      if (!hasImage) {
+        showError('图片生成失败')
+        return
+      }
+
+      console.log('图片路径:', exportedImagePath.value)
+
+      // #ifdef H5
+      console.log('H5 平台：在新窗口打开图片')
+      window.open(exportedImagePath.value, '_blank')
+      console.log('✅ H5 预览完成')
+      // #endif
+
+      // #ifndef H5
+      console.log('App 平台：调用 uni.previewImage API')
+      uni.previewImage({
+        urls: [exportedImagePath.value],
+        current: exportedImagePath.value,
+      })
+      // #endif
+    } catch (err) {
+      console.error('❌ 预览过程出错:', err)
+      uni.hideLoading()
+      showError('预览失败')
+    }
+  }
+
+  /**
+   * 保存图片到相册
+   */
+  const saveImage = async (): Promise<void> => {
+    console.log('=== 保存图片 ===')
+
+    try {
+      const hasImage = await ensureImageExported()
+      if (!hasImage) {
+        showError('图片生成失败')
+        return
+      }
+
+      console.log('图片路径:', exportedImagePath.value)
+
+      // #ifdef H5
+      console.log('H5 平台：触发图片下载')
+      const link = document.createElement('a')
+      link.href = exportedImagePath.value
+      link.download = `canvas_${Date.now()}.png`
+      link.click()
+      console.log('✅ H5 下载完成')
+      showSuccess('下载成功')
+      // #endif
+
+      // #ifndef H5
+      console.log('App 平台：调用 uni.saveImageToPhotosAlbum API')
+      uni.saveImageToPhotosAlbum({
+        filePath: exportedImagePath.value,
+        success: () => {
+          console.log('✅ 保存成功')
+          showSuccess('保存成功')
+        },
+        fail: (err) => {
+          console.error('❌ 保存失败', err)
+          showError('保存失败')
+        },
+      })
+      // #endif
+    } catch (err) {
+      console.error('❌ 保存过程出错:', err)
+      uni.hideLoading()
+      showError('保存失败')
+    }
+  }
+
+  /**
+   * 分享海报
+   * uniapp-x 中，建议先保存图片到相册，然后用户可以从相册手动分享
+   */
+  const handlePosterShare = async (posterPath: string): Promise<void> => {
+    console.log('分享海报:', posterPath)
+
+    try {
+      const hasImage = await ensureImageExported()
+      if (!hasImage) {
+        showError('图片生成失败')
+        return
+      }
+
+      // #ifdef H5
+      const link = document.createElement('a')
+      link.href = exportedImagePath.value
+      link.download = `poster_${Date.now()}.png`
+      link.click()
+      showSuccess('图片已下载')
+      // #endif
+
+      // #ifdef MP-WEIXIN
+      uni.showModal({
+        title: '分享提示',
+        content: '请点击右上角"..."按钮，将海报分享给好友',
+        showCancel: false,
+        confirmText: '我知道了',
+      })
+      // #endif
+
+      // #ifdef APP-PLUS || APP-ANDROID || APP-IOS
+      uni.showLoading({ title: '正在保存...', mask: true })
+
+      uni.saveImageToPhotosAlbum({
+        filePath: exportedImagePath.value,
+        success: () => {
+          uni.hideLoading()
+          uni.showModal({
+            title: '保存成功',
+            content: '海报已保存到相册，您可以从相册中打开图片进行分享',
+            showCancel: false,
+            confirmText: '好的',
+            success: () => {
+              showPosterModal.value = false
+            },
+          })
+        },
+        fail: (error) => {
+          uni.hideLoading()
+          console.error('保存失败:', error)
+          uni.showModal({
+            title: '保存失败',
+            content: '无法保存到相册，请检查相册权限设置',
+            showCancel: false,
+          })
+        },
+      })
+      // #endif
+
+      // #ifndef H5 || MP-WEIXIN || APP-PLUS || APP-ANDROID || APP-IOS
+      showError('当前平台暂不支持分享', 'none')
+      // #endif
+    } catch (err) {
+      console.error('❌ 分享过程出错:', err)
+      uni.hideLoading()
+      showError('分享失败')
+    }
+  }
+
+  /**
+   * 关闭弹窗
+   */
+  const handleClose = (): void => {
+    showPosterModal.value = false
+    canvasReady.value = false
+    exportedImagePath.value = ''
+    backgroundPath.value = ''
+    avatarPath.value = ''
+    qrCodePath.value = ''
+  }
+
+  return {
+    // 状态
+    showPosterModal,
+    canvasReady,
+    exportedImagePath,
+    backgroundPath,
+    avatarPath,
+    qrCodePath,
+
+    // 方法
+    loadImages,
+    createImageObject,
+    drawBackgroundImage,
+    drawAvatar,
+    drawQRCode,
+    drawPoster,
+    generatePoster,
+    exportCanvasAsImage,
+    previewImage,
+    saveImage,
+    handlePosterShare,
+    handleClose,
+  }
+}
